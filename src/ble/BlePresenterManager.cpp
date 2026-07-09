@@ -67,7 +67,7 @@ bool BlePresenterManager::init() {
     return false;
   }
 
-  NimBLEDevice::init("CrossPet_Presenter");
+  NimBLEDevice::init("Infinity_Presenter");
   NimBLEDevice::setSecurityAuth(false, false, false);
   NimBLEDevice::setPower(ESP_PWR_LVL_P3);
 
@@ -86,7 +86,7 @@ bool BlePresenterManager::init() {
     server = nullptr;
     return false;
   }
-  hid->setManufacturer("CrossPoint");
+  hid->setManufacturer("Infinity");
   hid->setPnp(0x02, 0x05AC, 0x0256, 0x0110);
   hid->setHidInfo(0x00, 0x01);
 

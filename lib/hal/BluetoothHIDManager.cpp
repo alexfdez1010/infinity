@@ -71,7 +71,7 @@ bool BluetoothHIDManager::enable() {
   if (!_nimbleOwnedByUs) {
     // First-time init
     LOG_INF("BT", "Heap before NimBLE init: %d bytes free", ESP.getFreeHeap());
-    NimBLEDevice::init("CrossPoint");
+    NimBLEDevice::init("Infinity");
     LOG_INF("BT", "Heap after NimBLE init: %d bytes free (delta: %dKB)",
             ESP.getFreeHeap(), (int)(ESP.getFreeHeap()) / 1024);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);

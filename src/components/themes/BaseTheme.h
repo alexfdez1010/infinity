@@ -153,6 +153,9 @@ class BaseTheme {
                              const int pageCount, std::string title, const int paddingBottom = 0,
                              const int textYOffset = 0, const bool isStarred = false) const;
   virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
+  // Centered "toast" card: a black rounded card with white bold text, centered
+  // horizontally, its text baseline at centerY. Shared by game win/game-over overlays.
+  virtual void drawCenteredCard(const GfxRenderer& renderer, const char* message, int centerY) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
   virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,

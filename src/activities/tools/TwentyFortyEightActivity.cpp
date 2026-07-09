@@ -273,21 +273,12 @@ void TwentyFortyEightActivity::render(RenderLock&&) {
     }
   }
 
-  // Overlay messages: card with black fill + white text
-  auto drawOverlayCard = [&](const char* msg, int centerY) {
-    int msgW = renderer.getTextWidth(UI_10_FONT_ID, msg);
-    int msgH = renderer.getLineHeight(UI_10_FONT_ID);
-    const int padX = 20, padY = 8;
-    int cardX = (pageWidth - msgW - padX * 2) / 2;
-    renderer.fillRoundedRect(cardX, centerY - padY, msgW + padX * 2, msgH + padY * 2, 10, Color::Black);
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY, msg, false, EpdFontFamily::BOLD);
-  };
-
+  // Overlay messages: shared black card + white bold text
   if (won && !gameOver) {
-    drawOverlayCard(tr(STR_YOU_WIN), pageHeight / 2 - 20);
+    GUI.drawCenteredCard(renderer, tr(STR_YOU_WIN), pageHeight / 2 - 20);
   }
   if (gameOver) {
-    drawOverlayCard(tr(STR_GAME_OVER), pageHeight / 2);
+    GUI.drawCenteredCard(renderer, tr(STR_GAME_OVER), pageHeight / 2);
   }
 
   // Button hints

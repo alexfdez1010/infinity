@@ -280,30 +280,11 @@ void HomeActivity::renderHeaderClock() {
     nextX += renderer.getTextWidth(SMALL_FONT_ID, heapBuf) + 6;
   }
 
-  if (!CROSSPET_SETTINGS.appWeather) return;
-
-  // Weather temp or sync status next to clock
-  const int weatherX = nextX;
+  // Weather app removed — only surface transient sync status next to the clock.
   if (weatherRefreshing) {
-    renderer.drawText(SMALL_FONT_ID, weatherX, 5, "...");
+    renderer.drawText(SMALL_FONT_ID, nextX, 5, "...");
   } else if (syncResultMsg) {
-    renderer.drawText(SMALL_FONT_ID, weatherX, 5, syncResultMsg);
-  } else {
-    // Cache weather string in memory — avoid SD read on every frame
-    static char cachedWeather[16] = "";
-    static unsigned long lastWeatherLoad = 0;
-    if (millis() - lastWeatherLoad > 60000 || cachedWeather[0] == '\0') {
-      WeatherData wData;
-      uint8_t wCity = 0;
-      char wTime[8] = "";
-      if (WeatherActivity::loadWeatherCache(wData, wCity, wTime, sizeof(wTime))) {
-        snprintf(cachedWeather, sizeof(cachedWeather), "%.0f%s", WeatherActivity::convertTemp(wData.temperature), WeatherActivity::tempUnitSuffix());
-      }
-      lastWeatherLoad = millis();
-    }
-    if (cachedWeather[0]) {
-      renderer.drawText(SMALL_FONT_ID, weatherX, 5, cachedWeather);
-    }
+    renderer.drawText(SMALL_FONT_ID, nextX, 5, syncResultMsg);
   }
 }
 

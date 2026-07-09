@@ -351,18 +351,8 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.drawImage(Logo120, logoX, logoY, LOGO_SZ, LOGO_SZ);
 
   // Brand name in Lexend bold below logo
-  const int lhBrand = renderer.getLineHeight(UI_12_FONT_ID);
   const int brandY = logoY + LOGO_SZ + 14;
-  renderer.drawCenteredText(UI_12_FONT_ID, brandY, "CrossPet Reader", true, EpdFontFamily::BOLD);
-
-  // Thin separator line
-  constexpr int SEP_HALF = 40;
-  const int sepY = brandY + lhBrand + 6;
-  renderer.fillRect(pageWidth / 2 - SEP_HALF, sepY, SEP_HALF * 2, 1);
-
-  // Version string below separator
-  const int verY = sepY + 8;
-  renderer.drawCenteredText(SMALL_FONT_ID, verY, CROSSPOINT_VERSION);
+  renderer.drawCenteredText(UI_12_FONT_ID, brandY, "Infinity", true, EpdFontFamily::BOLD);
 
   // Dark mode unless light is selected in settings
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {

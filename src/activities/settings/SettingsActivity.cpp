@@ -101,13 +101,7 @@ void SettingsActivity::onEnter() {
   struct AppToggle { StrId id; uint8_t CrossPetSettings::* field; const char* key; };
   const AppToggle appToggles[] = {
     {StrId::STR_CLOCK,              &CrossPetSettings::appClock,            "appClock"},
-    {StrId::STR_WEATHER,            &CrossPetSettings::appWeather,          "appWeather"},
-    {StrId::STR_POMODORO,           &CrossPetSettings::appPomodoro,         "appPomodoro"},
-    {StrId::STR_READING_STATS_APP,  &CrossPetSettings::appReadingStats,     "appReadingStats"},
-    {StrId::STR_READING_GOALS_APP,  &CrossPetSettings::appReadingGoals,     "appReadingGoals"},
-    {StrId::STR_SLEEP_IMAGE_PICKER, &CrossPetSettings::appSleepImagePicker, "appSleepImagePicker"},
     {StrId::STR_GAMES,              &CrossPetSettings::appGames,            "appGames"},
-    {StrId::STR_FLASHCARD,          &CrossPetSettings::appFlashcard,        "appFlashcard"},
   };
   for (const auto& t : appToggles) {
     auto field = t.field;
@@ -124,22 +118,10 @@ void SettingsActivity::onEnter() {
       {StrId::STR_CLOCK_NTP, StrId::STR_CLOCK_MANUAL}, "clockMode", StrId::STR_CROSSPET));
   // keepClockAlive and sleepRefreshInterval removed — drain ~3-4mA in deep sleep
 
-  // WEATHER section
-  appsSettings.push_back(SettingInfo::Section("WEATHER"));
-  appsSettings.push_back(SettingInfo::Enum(StrId::STR_TEMP_UNIT, &CrossPointSettings::temperatureUnit,
-      {StrId::STR_CELSIUS, StrId::STR_FAHRENHEIT}, "temperatureUnit", StrId::STR_CROSSPET));
-
   // OPTIONS section: CrossPet-specific global settings
   appsSettings.push_back(SettingInfo::Section("OPTIONS"));
   appsSettings.push_back(SettingInfo::Enum(StrId::STR_TEXT_DARKNESS, &CrossPointSettings::textDarkness,
       {StrId::STR_NORMAL, StrId::STR_DARK, StrId::STR_EXTRA_DARK}, "textDarkness", StrId::STR_CROSSPET));
-  appsSettings.push_back(SettingInfo::Toggle(StrId::STR_DARK_MODE, &CrossPointSettings::darkMode,
-      "darkMode", StrId::STR_CROSSPET));
-  appsSettings.push_back(SettingInfo::DynamicToggle(
-      StrId::STR_HOME_FOCUS_MODE,
-      [] { return CROSSPET_SETTINGS.homeFocusMode; },
-      [](uint8_t v) { CROSSPET_SETTINGS.homeFocusMode = v; CROSSPET_SETTINGS.saveToFile(); },
-      "homeFocusMode", StrId::STR_CROSSPET));
 
   // Insert section headers into each category
   // Display: SCREEN (sleep action + optional cover settings), APPEARANCE (remaining)

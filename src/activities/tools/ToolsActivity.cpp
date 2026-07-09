@@ -1,135 +1,40 @@
 #include "ToolsActivity.h"
 
-#include <GfxRenderer.h>
-#include <I18n.h>
-
 #include "ClockActivity.h"
-#include "PomodoroActivity.h"
-#include "TwentyFortyEightActivity.h"
-#include "PoliticalSimActivity.h"
-#include "WeatherActivity.h"
+#include "CrossPetSettings.h"
+#include "GamesActivity.h"
 #include "ReadingGoalsActivity.h"
 #include "ReadingStatsActivity.h"
-#include "SleepImagePickerActivity.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/settings/OpdsServerListActivity.h"
 #include "OpdsServerStore.h"
-#include "../flashcard/FlashcardDeckListActivity.h"
-#include "components/UITheme.h"
-#include "CrossPetSettings.h"
-#include "CrossPointSettings.h"
-#include "fontIds.h"
 
 void ToolsActivity::buildMenu() {
   menuEntries.clear();
 
-  // File Transfer is always visible
-  menuEntries.push_back({StrId::STR_FILE_TRANSFER, [this] { activityManager.goToFileTransfer(); }});
+  // File Browser — swapped with File Transfer, which now lives on the home bar
+  add(StrId::STR_BROWSE_FILES, [this] { activityManager.goToFileBrowser(); });
 
   // Apps — filtered by CrossPetSettings toggles
   if (CROSSPET_SETTINGS.appClock)
-    menuEntries.push_back({StrId::STR_CLOCK, [this] {
-      activityManager.pushActivity(std::make_unique<ClockActivity>(renderer, mappedInput));
-    }});
-  if (CROSSPET_SETTINGS.appWeather)
-    menuEntries.push_back({StrId::STR_WEATHER, [this] {
-      activityManager.pushActivity(std::make_unique<WeatherActivity>(renderer, mappedInput));
-    }});
-  if (CROSSPET_SETTINGS.appPomodoro)
-    menuEntries.push_back({StrId::STR_POMODORO, [this] {
-      activityManager.pushActivity(std::make_unique<PomodoroActivity>(renderer, mappedInput));
-    }});
-  if (CROSSPET_SETTINGS.appReadingStats)
-    menuEntries.push_back({StrId::STR_READING_STATS_APP, [this] {
-      activityManager.pushActivity(std::make_unique<ReadingStatsActivity>(renderer, mappedInput));
-    }});
-  if (CROSSPET_SETTINGS.appReadingGoals)
-    menuEntries.push_back({StrId::STR_READING_GOALS_APP, [this] {
-      activityManager.pushActivity(std::make_unique<ReadingGoalsActivity>(renderer, mappedInput));
-    }});
-  if (CROSSPET_SETTINGS.appSleepImagePicker)
-    menuEntries.push_back({StrId::STR_SLEEP_IMAGE_PICKER, [this] {
-      activityManager.pushActivity(std::make_unique<SleepImagePickerActivity>(renderer, mappedInput));
-    }});
+    add(StrId::STR_CLOCK, [this] { push<ClockActivity>(); });
 
-  if (CROSSPET_SETTINGS.appFlashcard)
-    menuEntries.push_back({StrId::STR_FLASHCARD, [this] {
-      activityManager.pushActivity(std::make_unique<FlashcardDeckListActivity>(renderer, mappedInput));
-    }});
+  // Reading stats & goals are always available
+  add(StrId::STR_READING_STATS_APP, [this] { push<ReadingStatsActivity>(); });
+  add(StrId::STR_READING_GOALS_APP, [this] { push<ReadingGoalsActivity>(); });
 
   // OPDS browser (if any servers configured)
   if (OPDS_STORE.hasServers())
-    menuEntries.push_back({StrId::STR_OPDS_BROWSER, [this] {
+    add(StrId::STR_OPDS_BROWSER, [this] {
       const auto& servers = OPDS_STORE.getServers();
       if (servers.size() == 1) {
-        activityManager.pushActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0]));
+        push<OpdsBookBrowserActivity>(servers[0]);
       } else {
-        activityManager.pushActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
+        push<OpdsServerListActivity>(true);
       }
-    }});
+    });
 
-  // Games — single master toggle for all games
-  if (CROSSPET_SETTINGS.appGames) {
-    menuEntries.push_back({StrId::STR_2048, [this] {
-      activityManager.pushActivity(std::make_unique<TwentyFortyEightActivity>(renderer, mappedInput));
-    }});
-    menuEntries.push_back({StrId::STR_POLITICAL_SIM, [this] {
-      activityManager.pushActivity(std::make_unique<PoliticalSimActivity>(renderer, mappedInput));
-    }});
-  }
-}
-
-void ToolsActivity::onEnter() {
-  Activity::onEnter();
-  buildMenu();
-  selectorIndex = 0;
-  requestUpdate();
-}
-
-void ToolsActivity::loop() {
-  const int menuCount = static_cast<int>(menuEntries.size());
-
-  buttonNavigator.onNext([this, menuCount] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPrevious([this, menuCount] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
-    requestUpdate();
-  });
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (selectorIndex >= 0 && selectorIndex < menuCount) {
-      menuEntries[selectorIndex].launch();
-    }
-  }
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    finish();
-  }
-}
-
-void ToolsActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  const int menuCount = static_cast<int>(menuEntries.size());
-
-  renderer.clearScreen();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_TOOLS));
-
-  const int menuTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int menuHeight = pageHeight - menuTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-
-  GUI.drawList(renderer, Rect{0, menuTop, pageWidth, menuHeight}, menuCount, selectorIndex,
-               [this](int index) -> std::string {
-                 return I18N.get(menuEntries[index].labelId);
-               });
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+  // Games — opens a submenu listing the available games
+  if (CROSSPET_SETTINGS.appGames)
+    add(StrId::STR_GAMES, [this] { push<GamesActivity>(); });
 }

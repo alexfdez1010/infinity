@@ -15,18 +15,10 @@ bool CrossPetSettings::saveToFile() const {
   Storage.mkdir("/.crosspoint");
 
   JsonDocument doc;
-  doc["homeFocusMode"] = homeFocusMode;
-
   doc["appClock"] = appClock;
-  doc["appWeather"] = appWeather;
-  doc["appPomodoro"] = appPomodoro;
   doc["appReadingStats"] = appReadingStats;
   doc["appReadingGoals"] = appReadingGoals;
-  doc["appSleepImagePicker"] = appSleepImagePicker;
   doc["appGames"] = appGames;
-  doc["appFlashcard"] = appFlashcard;
-  doc["flashcardNewPerDay"] = flashcardNewPerDay;
-  doc["flashcardMaxReviewPerDay"] = flashcardMaxReviewPerDay;
 
   String json;
   serializeJson(doc, json);
@@ -50,9 +42,9 @@ bool CrossPetSettings::loadFromFile() {
         LOG_ERR("CPS", "CrossPet settings JSON parse error: %s", error.c_str());
         return false;
       }
-      homeFocusMode = doc["homeFocusMode"] | (uint8_t)0;
+      // homeFocusMode ("Modo concentración") is removed — always disabled.
+      homeFocusMode = 0;
 
-      // Migrate legacy homeShow* fields to app* toggles.
       // ArduinoJson's | operator treats 0/false as "absent", so we must use containsKey
       // to distinguish "user saved 0 (off)" from "key missing (default on)".
       if (doc.containsKey("appClock"))
@@ -61,25 +53,10 @@ bool CrossPetSettings::loadFromFile() {
         appClock = doc["homeShowClock"].as<uint8_t>();
       // else: keep struct default (1)
 
-      if (doc.containsKey("appWeather"))
-        appWeather = doc["appWeather"].as<uint8_t>();
-      else if (doc.containsKey("homeShowWeather"))
-        appWeather = doc["homeShowWeather"].as<uint8_t>();
-      // else: keep struct default (1)
-      appPomodoro = doc["appPomodoro"] | (uint8_t)1;
-      appReadingStats = doc["appReadingStats"] | (uint8_t)1;
-      appReadingGoals = doc["appReadingGoals"] | (uint8_t)1;
-      appSleepImagePicker = doc["appSleepImagePicker"] | (uint8_t)1;
-      // Migrate: if any legacy per-game toggle was off, set master toggle off
-      if (doc.containsKey("appGames")) {
-        appGames = doc["appGames"] | (uint8_t)1;
-      } else {
-        // Legacy migration: all games were on by default, keep on unless explicitly saved off
-        appGames = 1;
-      }
-      appFlashcard = doc["appFlashcard"] | (uint8_t)1;
-      flashcardNewPerDay = doc["flashcardNewPerDay"] | (uint8_t)10;
-      flashcardMaxReviewPerDay = doc["flashcardMaxReviewPerDay"] | (uint8_t)250;
+      // Reading stats & goals are always active.
+      appReadingStats = 1;
+      appReadingGoals = 1;
+      appGames = doc["appGames"] | (uint8_t)1;
       LOG_DBG("CPS", "CrossPet settings loaded from file");
       return true;
     }
@@ -95,7 +72,6 @@ bool CrossPetSettings::loadFromFile() {
       if (!error) {
         // Migrate legacy homeShow* to app* toggles
         appClock = doc["homeShowClock"] | (uint8_t)1;
-        appWeather = doc["homeShowWeather"] | (uint8_t)1;
         LOG_DBG("CPS", "CrossPet settings migrated from settings.json");
         // Persist the migrated values to crosspet.json
         saveToFile();

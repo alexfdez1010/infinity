@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CrossPet is a Spanish (Spain) fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) — open-source ESP32-C3 firmware for the Xteink X4 e-paper reader. Built with PlatformIO, C++17 (gnu++2a), Arduino framework. Current version: defined in `platformio.ini` under `[crosspoint] version`.
+Infinity (formerly CrossPet) is a Spanish (Spain) firmware based on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) — open-source ESP32-C3 firmware for the Xteink X4 e-paper reader. Built with PlatformIO, C++17 (gnu++2a), Arduino framework. Current version: defined in `platformio.ini` under `[crosspoint] version`.
 
 **Hardware constraints:** ESP32-C3 RISC-V @ 160MHz, ~380KB RAM (no PSRAM), 16MB flash, 800x480 E-Ink display (SSD1677), SD card storage.
 
@@ -102,8 +102,10 @@ Dual OTA scheme: two 6.25MB app partitions (`app0`/`app1`), 3.375MB SPIFFS, 64KB
 | Task | Files |
 |------|-------|
 | Add new activity/screen | `src/activities/`, inherit from `Activity`, register in `ActivityManager` |
+| Add a list-menu screen (submenu/picker) | Subclass `ListMenuActivity` (`src/activities/ListMenuActivity.{h,cpp}`); implement `buildMenu()` with `add()`/`push<>()`. See `list-menu` skill |
 | Add new setting | `src/CrossPointSettings.h`, `src/SettingsList.h`, `src/activities/settings/` |
 | Add/change a Tools menu app | `src/activities/tools/ToolsActivity.cpp` (`buildMenu()`), toggle in `src/CrossPetSettings.h` |
+| Add/change a game | `src/activities/tools/GamesActivity.cpp` (`buildMenu()`); high scores in `src/GameScores.{h,cpp}` |
 | Add gamification feature (goals/streaks/achievements) | `src/gamification/Gamification.h/.cpp`, UI in `src/activities/tools/ReadingGoalsActivity.*` |
 | Regenerate Political Simulator data | `scripts/gen_polsim.mjs` → `src/activities/tools/PoliticalSimData.h` |
 | Add i18n string | `lib/I18n/translations/{english,spanish}.yaml`, then build (auto-generates) |

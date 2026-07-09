@@ -14,7 +14,7 @@ int KOReaderSyncClient::lastEspError = 0;
 
 namespace {
 // Device identifier for CrossPoint reader
-constexpr char DEVICE_NAME[] = "CrossPoint";
+constexpr char DEVICE_NAME[] = "Infinity";
 constexpr char DEVICE_ID[] = "crosspoint-reader";
 
 // Small TLS buffers to fit in ESP32-C3's limited heap (~46KB after WiFi).

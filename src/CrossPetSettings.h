@@ -26,15 +26,10 @@ class CrossPetSettings {
 
   // Per-app visibility — controls both Tools menu and home screen widgets (1=show, 0=hide)
   uint8_t appClock = 1;
-  uint8_t appWeather = 1;
-  uint8_t appPomodoro = 1;
+  // Reading stats & goals are always active (no toggle).
   uint8_t appReadingStats = 1;
   uint8_t appReadingGoals = 1;  // Gamification: goals, streaks, achievements
-  uint8_t appSleepImagePicker = 1;
   uint8_t appGames = 1;  // Master toggle for all games (2048, Political Sim)
-  uint8_t appFlashcard = 1;  // Per-app visibility toggle (1=show, 0=hide)
-  uint8_t flashcardNewPerDay = 10;      // New cards per day limit
-  uint8_t flashcardMaxReviewPerDay = 250; // Max reviews per day (capped at 255 for uint8_t)
 
  private:
   CrossPetSettings() = default;

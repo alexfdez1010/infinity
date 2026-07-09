@@ -847,6 +847,15 @@ void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char*
   renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
 }
 
+void BaseTheme::drawCenteredCard(const GfxRenderer& renderer, const char* message, int centerY) const {
+  const int msgW = renderer.getTextWidth(UI_10_FONT_ID, message);
+  const int msgH = renderer.getLineHeight(UI_10_FONT_ID);
+  const int padX = 20, padY = 8;
+  const int cardX = (renderer.getScreenWidth() - msgW - padX * 2) / 2;
+  renderer.fillRoundedRect(cardX, centerY - padY, msgW + padX * 2, msgH + padY * 2, 10, Color::Black);
+  renderer.drawCenteredText(UI_10_FONT_ID, centerY, message, false, EpdFontFamily::BOLD);
+}
+
 void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
                               int contentStartX, int contentWidth) const {
   const auto& metrics = UITheme::getInstance().getMetrics();

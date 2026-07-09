@@ -1,30 +1,14 @@
 #pragma once
 #include <I18n.h>
 
-#include <functional>
-#include <vector>
+#include "../ListMenuActivity.h"
 
-#include "../Activity.h"
-#include "util/ButtonNavigator.h"
-
-class ToolsActivity final : public Activity {
-  ButtonNavigator buttonNavigator;
-  int selectorIndex = 0;
-
-  // Dynamic menu entries built from enabled apps
-  struct AppEntry {
-    StrId labelId;
-    std::function<void()> launch;
-  };
-  std::vector<AppEntry> menuEntries;
-
-  void buildMenu();
+class ToolsActivity final : public ListMenuActivity {
+ protected:
+  // Dynamic menu built from enabled apps (see CrossPetSettings toggles).
+  void buildMenu() override;
 
  public:
-  explicit ToolsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Tools", renderer, mappedInput) {}
-
-  void onEnter() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+  ToolsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : ListMenuActivity("Tools", StrId::STR_TOOLS, renderer, mappedInput) {}
 };

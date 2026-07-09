@@ -314,7 +314,7 @@ void HomeActivity::renderBottomBarIcons() {
   const BarItem items[] = {
     {ToolsIcon, tr(STR_APPS)},
     {RecentIcon, tr(STR_RECENTS)},
-    {LibraryIcon, tr(STR_BROWSE_FILES)},
+    {TransferIcon, tr(STR_FILE_TRANSFER)},
     {Settings2Icon, tr(STR_SETTINGS_TITLE)},
   };
 
@@ -354,7 +354,7 @@ void HomeActivity::renderBottomBarSelection() {
       const BarItem items[] = {
         {ToolsIcon, tr(STR_APPS)},
         {RecentIcon, tr(STR_RECENTS)},
-        {LibraryIcon, tr(STR_BROWSE_FILES)},
+        {TransferIcon, tr(STR_FILE_TRANSFER)},
         {Settings2Icon, tr(STR_SETTINGS_TITLE)},
       };
       const int lineH = renderer.getLineHeight(SMALL_FONT_ID);
@@ -431,7 +431,7 @@ void HomeActivity::loopCrossPet() {
       switch (selectorIndex - barStart) {
         case 0: onToolsOpen(); break;
         case 1: onRecentBooksOpen(); break;
-        case 2: onFileBrowserOpen(); break;
+        case 2: onFileTransferOpen(); break;
         case 3: onSettingsOpen(); break;
       }
     }

@@ -35,23 +35,13 @@ inline const std::vector<SettingInfo>& getSettingsList() {
           StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30, StrId::STR_OFF},
           "refreshFrequency", StrId::STR_CAT_DISPLAY),
-      SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                        {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED, StrId::STR_THEME_CROSSPET, StrId::STR_THEME_CROSSPET_CLASSIC},
-                        "uiTheme", StrId::STR_CAT_DISPLAY),
+      // Interface selector removed — UI is fixed to the Infinity theme.
       SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
-                          StrId::STR_CAT_DISPLAY),
-      SettingInfo::Toggle(StrId::STR_DARK_MODE, &CrossPointSettings::darkMode, "darkMode",
                           StrId::STR_CAT_DISPLAY),
       SettingInfo::Enum(StrId::STR_TEMP_UNIT, &CrossPointSettings::temperatureUnit,
                         {StrId::STR_CELSIUS, StrId::STR_FAHRENHEIT}, "temperatureUnit", StrId::STR_CAT_DISPLAY),
       SettingInfo::Enum(StrId::STR_CLOCK_MODE, &CrossPointSettings::clockMode,
                         {StrId::STR_CLOCK_NTP, StrId::STR_CLOCK_MANUAL}, "clockMode", StrId::STR_CAT_DISPLAY),
-      // Home screen layout — stored in crosspet.json
-      SettingInfo::DynamicToggle(
-          StrId::STR_HOME_FOCUS_MODE,
-          [] { return CROSSPET_SETTINGS.homeFocusMode; },
-          [](uint8_t v) { CROSSPET_SETTINGS.homeFocusMode = v; CROSSPET_SETTINGS.saveToFile(); },
-          "homeFocusMode", StrId::STR_CAT_DISPLAY),
       // Beta: route custom SD-card font to UI text (filenames, menus) as well as reader.
       SettingInfo::DynamicToggle(
           StrId::STR_SYSTEM_WIDE_CUSTOM_FONT,

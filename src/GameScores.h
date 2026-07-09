@@ -7,7 +7,8 @@ class GameScores {
   static GameScores instance;
 
  public:
-  uint32_t best2048 = 0; // 2048 best score
+  uint32_t best2048 = 0;    // 2048 best score
+  uint32_t bestApagon = 0;  // Apagón fewest moves to solve (0 = no record yet)
 
   static GameScores& getInstance() { return instance; }
 
