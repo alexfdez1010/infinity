@@ -1,0 +1,373 @@
+#include "HomeActivity.h"
+
+#include <Bitmap.h>
+#include <Epub.h>
+#include <FontDecompressor.h>
+#include <FontManager.h>
+#include <FsHelpers.h>
+#include <GfxRenderer.h>
+#include <HalStorage.h>
+#include <I18n.h>
+#include <Xtc.h>
+
+extern FontDecompressor fontDecompressor;
+#ifdef ENABLE_BLE
+#include <BluetoothHIDManager.h>
+#endif
+
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+#include "CrossPetSettings.h"
+#include "CrossPointSettings.h"
+#include "MappedInputManager.h"
+#include "OpdsServerStore.h"
+#include "RecentBooksStore.h"
+#include "components/UITheme.h"
+#include "fontIds.h"
+#include "activities/network/WifiSelectionActivity.h"
+#include "network/OpportunisticTimeSync.h"
+#include "activities/tools/WeatherActivity.h"
+#include "WifiCredentialStore.h"
+#include <WiFi.h>
+#include "util/StringUtils.h"
+
+// ── Buffer management ─────────────────────────────────────────────────────────
+
+bool HomeActivity::storeCoverBuffer() {
+  uint8_t* fb = renderer.getFrameBuffer();
+  if (!fb) return false;
+  // Guard: need buffer size + 12KB overhead for heap fragmentation safety
+  const size_t bufSize = renderer.getBufferSize();
+  if (ESP.getFreeHeap() < bufSize + 12 * 1024) return false;
+  freeCoverBuffer();
+  coverBuffer = static_cast<uint8_t*>(malloc(bufSize));
+  if (!coverBuffer) return false;
+  memcpy(coverBuffer, fb, bufSize);
+  return true;
+}
+
+int HomeActivity::getMenuItemCount() const {
+  int count = 4;  // File Browser, Recents, File transfer, Settings
+  if (!recentBooks.empty()) {
+    count += recentBooks.size();
+  }
+  if (hasOpdsServers) {
+    count++;
+  }
+  return count;
+}
+
+bool HomeActivity::restoreCoverBuffer() {
+  if (!coverBuffer) return false;
+  uint8_t* fb = renderer.getFrameBuffer();
+  if (!fb) return false;
+  memcpy(fb, coverBuffer, renderer.getBufferSize());
+  return true;
+}
+
+void HomeActivity::freeCoverBuffer() {
+  if (coverBuffer) { free(coverBuffer); coverBuffer = nullptr; }
+  coverBufferStored = false;
+}
+
+// ── Book loading ──────────────────────────────────────────────────────────────
+
+void HomeActivity::loadRecentBooks(int maxBooks) {
+  recentBooks.clear();
+  for (const RecentBook& b : RECENT_BOOKS.getBooks()) {
+    if (static_cast<int>(recentBooks.size()) >= maxBooks) break;
+    if (Storage.exists(b.path.c_str())) recentBooks.push_back(b);
+  }
+}
+
+void HomeActivity::loadRecentCovers(int coverHeight) {
+  recentsLoading = true;
+
+#ifdef ENABLE_BLE
+  // Skip cover thumbnail generation when a BT HID device is connected. NimBLE + GATT
+  // context eats ~65-75KB — decoding JPG/PNG on top fragments the heap and risks OOM.
+  // The converter-level heap guards (MIN_FREE_HEAP_FOR_THUMB / _PNG_THUMB) would catch
+  // this anyway, but skipping entirely avoids the loading popup flash + SD churn on
+  // every home re-entry while the remote is paired.
+  if (!BluetoothHIDManager::getInstance().getConnectedDevices().empty()) {
+    LOG_INF("HOME", "BT HID connected — skipping recent-book cover thumbnail generation");
+    recentsLoaded = true;
+    recentsLoading = false;
+    return;
+  }
+#endif
+
+  Rect popup;
+  bool showingLoading = false;
+  bool anyChanged = false;
+  int progress = 0;
+
+  for (RecentBook& book : recentBooks) {
+    bool generated = false;
+    if (FsHelpers::hasEpubExtension(book.path)) {
+      // Fast path: if both cover store entry and on-disk thumb already exist,
+      // skip Epub load entirely. Loading Epub allocates ~10-20KB (OPF parse +
+      // metadata cache); doing it 4× per home entry on a 46KB-free heap with
+      // an external font loaded fragments the heap badly enough to corrupt
+      // FreeRTOS mutex storage (xTaskPriorityDisinherit assert at home entry
+      // after KOReader sync). Only pay the load cost when recovery is needed.
+      if (!book.coverBmpPath.empty()) {
+        const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+        if (Storage.exists(coverPath.c_str())) {
+          progress++;
+          continue;
+        }
+      }
+
+      // Slow path: cover store entry is empty (BUG-009 poisoned) or thumb is
+      // missing on disk. Load Epub to derive cover path / regenerate thumb.
+      Epub epub(book.path, "/.crosspoint");
+      epub.load(false, true);
+
+      if (book.coverBmpPath.empty()) {
+        book.coverBmpPath = epub.getThumbBmpPath();
+      }
+      const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+      if (!Storage.exists(coverPath.c_str())) {
+        if (!showingLoading) { showingLoading = true; popup = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)); }
+        GUI.fillPopupProgress(renderer, popup, 10 + progress * (90 / (int)recentBooks.size()));
+
+        // Free font caches around JPEG decode: external font glyph cache
+        // (~34KB) + JPEGDEC working set (~33KB) overflows residual heap on
+        // ESP32-C3, causing decode to abort with "no cover" when external
+        // font is enabled. Caches are restored before returning.
+        const bool wasExtLoaded = FontMgr.isExternalFontEnabled() || FontMgr.isUiFontEnabled();
+        if (wasExtLoaded) {
+          fontDecompressor.clearCache();
+          FontMgr.unloadActiveFonts();
+        }
+        generated = epub.generateThumbBmp(coverHeight);
+        if (wasExtLoaded) {
+          FontMgr.reloadActiveFonts();
+        }
+
+        if (generated) {
+          RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.coverBmpPath);
+        }
+        coverRendered = false;
+        requestUpdate();
+      }
+    } else if (FsHelpers::hasXtcExtension(book.path)) {
+      // Same fast path for XTC: skip load when thumb already cached.
+      if (!book.coverBmpPath.empty()) {
+        const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+        if (Storage.exists(coverPath.c_str())) {
+          progress++;
+          continue;
+        }
+      }
+      Xtc xtc(book.path, "/.crosspoint");
+      if (xtc.load()) {
+        if (book.coverBmpPath.empty()) {
+          book.coverBmpPath = xtc.getThumbBmpPath();
+        }
+        const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+        if (!Storage.exists(coverPath.c_str())) {
+          if (!showingLoading) { showingLoading = true; popup = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)); }
+          GUI.fillPopupProgress(renderer, popup, 10 + progress * (90 / (int)recentBooks.size()));
+
+          const bool wasExtLoaded = FontMgr.isExternalFontEnabled() || FontMgr.isUiFontEnabled();
+          if (wasExtLoaded) {
+            fontDecompressor.clearCache();
+            FontMgr.unloadActiveFonts();
+          }
+          generated = xtc.generateThumbBmp(coverHeight);
+          if (wasExtLoaded) {
+            FontMgr.reloadActiveFonts();
+          }
+
+          if (generated) {
+            RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.coverBmpPath);
+          }
+        }
+      }
+    }
+    if (generated) anyChanged = true;
+    progress++;
+  }
+
+  recentsLoaded = true;
+  recentsLoading = false;
+  if (anyChanged) {
+    coverRendered = false;
+    requestUpdate();
+  }
+}
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+void HomeActivity::onEnter() {
+  Activity::onEnter();
+
+  hasOpdsServers = OPDS_STORE.hasServers();
+
+  selectorIndex = 0;
+  coverRendered = false;
+  firstRenderDone = false;
+  recentsLoaded = false;
+  recentsLoading = false;
+  loadRecentBooks(4);
+  requestUpdate();
+}
+
+void HomeActivity::onExit() {
+  Activity::onExit();
+  freeCoverBuffer();
+}
+
+// ── Input / Render dispatchers ────────────────────────────────────────────────
+
+void HomeActivity::loop() {
+  if (SETTINGS.uiTheme <= CrossPointSettings::LYRA_3_COVERS)
+    loopOriginal();
+  else if (SETTINGS.uiTheme == CrossPointSettings::CROSSPET_CLASSIC)
+    loopClassic();
+  else
+    loopCrossPet();
+}
+
+void HomeActivity::render(RenderLock&&) {
+  if (SETTINGS.uiTheme <= CrossPointSettings::LYRA_3_COVERS)
+    renderOriginal();
+  else if (SETTINGS.uiTheme == CrossPointSettings::CROSSPET_CLASSIC)
+    renderClassic();
+  else
+    renderCrossPet();
+}
+
+// ── Shared render helpers ─────────────────────────────────────────────────────
+
+void HomeActivity::renderHeaderClock() {
+  int nextX = 10;
+
+  if (!CROSSPET_SETTINGS.appClock) {
+    // Show heap even without clock
+    if (SETTINGS.showFreeHeap) {
+      char heapBuf[12];
+      snprintf(heapBuf, sizeof(heapBuf), "%dKB", ESP.getFreeHeap() / 1024);
+      renderer.drawText(SMALL_FONT_ID, nextX, 5, heapBuf, true);
+    }
+    return;
+  }
+
+  time_t now;
+  time(&now);
+  struct tm timeinfo;
+  localtime_r(&now, &timeinfo);
+  char buf[8];
+  if (timeinfo.tm_year >= 125)
+    snprintf(buf, sizeof(buf), "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+  else
+    snprintf(buf, sizeof(buf), "--:--");
+
+  const int clockW = renderer.getTextWidth(SMALL_FONT_ID, buf);
+  renderer.drawText(SMALL_FONT_ID, nextX, 5, buf);
+  nextX += clockW + 6;
+
+  // Developer: show free heap after clock
+  if (SETTINGS.showFreeHeap) {
+    char heapBuf[12];
+    snprintf(heapBuf, sizeof(heapBuf), "%dKB", ESP.getFreeHeap() / 1024);
+    renderer.drawText(SMALL_FONT_ID, nextX, 5, heapBuf, true);
+    nextX += renderer.getTextWidth(SMALL_FONT_ID, heapBuf) + 6;
+  }
+
+  if (!CROSSPET_SETTINGS.appWeather) return;
+
+  // Weather temp or sync status next to clock
+  const int weatherX = nextX;
+  if (weatherRefreshing) {
+    renderer.drawText(SMALL_FONT_ID, weatherX, 5, "...");
+  } else if (syncResultMsg) {
+    renderer.drawText(SMALL_FONT_ID, weatherX, 5, syncResultMsg);
+  } else {
+    // Cache weather string in memory — avoid SD read on every frame
+    static char cachedWeather[16] = "";
+    static unsigned long lastWeatherLoad = 0;
+    if (millis() - lastWeatherLoad > 60000 || cachedWeather[0] == '\0') {
+      WeatherData wData;
+      uint8_t wCity = 0;
+      char wTime[8] = "";
+      if (WeatherActivity::loadWeatherCache(wData, wCity, wTime, sizeof(wTime))) {
+        snprintf(cachedWeather, sizeof(cachedWeather), "%.0f%s", WeatherActivity::convertTemp(wData.temperature), WeatherActivity::tempUnitSuffix());
+      }
+      lastWeatherLoad = millis();
+    }
+    if (cachedWeather[0]) {
+      renderer.drawText(SMALL_FONT_ID, weatherX, 5, cachedWeather);
+    }
+  }
+}
+
+// ── Sync ──────────────────────────────────────────────────────────────────────
+
+void HomeActivity::performSyncAfterWifi() {
+  static char syncBuf[24];
+  weatherRefreshing = true;
+  requestUpdateAndWait();
+
+  // Take the radio away from any in-flight background NTP sync
+  OpportunisticTimeSync::claimForeground();
+  if (WiFi.status() != WL_CONNECTED) {
+    const auto& ssid = WIFI_STORE.getLastConnectedSsid();
+    const auto* cred = ssid.empty() ? nullptr : WIFI_STORE.findCredential(ssid);
+    if (cred) {
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+      const unsigned long connectStart = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - connectStart < 8000) {
+        delay(100);
+      }
+      if (WiFi.status() != WL_CONNECTED) {
+        WiFi.disconnect(false);
+        WiFi.mode(WIFI_OFF);
+        weatherRefreshing = false;
+        snprintf(syncBuf, sizeof(syncBuf), "%s", tr(STR_WIFI_CONN_FAILED));
+        syncResultMsg = syncBuf;
+        syncResultExpiry = millis() + 3000;
+        requestUpdate();
+        return;
+      }
+    }
+  }
+
+  int rc = WeatherActivity::silentRefresh();
+  weatherRefreshing = false;
+  if (rc == 0)      snprintf(syncBuf, sizeof(syncBuf), "%s", tr(STR_SYNC_OK));
+  else if (rc == 2) snprintf(syncBuf, sizeof(syncBuf), "%s", tr(STR_WIFI_TIMEOUT));
+  else              snprintf(syncBuf, sizeof(syncBuf), tr(STR_API_ERROR), rc);
+  syncResultMsg = syncBuf;
+  syncResultExpiry = millis() + 3000;
+  coverRendered = false;
+  requestUpdate();
+}
+
+void HomeActivity::doSync() {
+  static char syncBuf2[24];
+  if (WIFI_STORE.getLastConnectedSsid().empty()) {
+    snprintf(syncBuf2, sizeof(syncBuf2), "%s", tr(STR_WIFI_CONN_FAILED));
+    syncResultMsg = syncBuf2;
+    syncResultExpiry = millis() + 3000;
+    requestUpdate();
+    return;
+  }
+  performSyncAfterWifi();
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+
+void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
+void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
+void HomeActivity::onRecentBooksOpen() { activityManager.goToRecentBooks(); }
+void HomeActivity::onFileTransferOpen(){ activityManager.goToFileTransfer(); }
+void HomeActivity::onSettingsOpen()    { activityManager.goToSettings(); }
+void HomeActivity::onToolsOpen()       { activityManager.goToTools(); }
+void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
