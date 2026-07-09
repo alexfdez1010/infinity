@@ -8,6 +8,10 @@ Infinity (formerly CrossPet) is a Spanish (Spain) firmware based on [CrossPoint 
 
 **Hardware constraints:** ESP32-C3 RISC-V @ 160MHz, ~380KB RAM (no PSRAM), 16MB flash, 800x480 E-Ink display (SSD1677), SD card storage.
 
+## Workflow
+
+**Always commit and push when you finish a task.** After completing any change, create a commit and `git push` — do not leave finished work uncommitted.
+
 ## Build Commands
 
 ```bash
@@ -105,9 +109,8 @@ Dual OTA scheme: two 6.25MB app partitions (`app0`/`app1`), 3.375MB SPIFFS, 64KB
 | Add a list-menu screen (submenu/picker) | Subclass `ListMenuActivity` (`src/activities/ListMenuActivity.{h,cpp}`); implement `buildMenu()` with `add()`/`push<>()`. See `list-menu` skill |
 | Add new setting | `src/CrossPointSettings.h`, `src/SettingsList.h`, `src/activities/settings/` |
 | Add/change a Tools menu app | `src/activities/tools/ToolsActivity.cpp` (`buildMenu()`), toggle in `src/CrossPetSettings.h` |
-| Add/change a game | `src/activities/tools/GamesActivity.cpp` (`buildMenu()`); high scores in `src/GameScores.{h,cpp}` |
+| Add/change a game | `src/activities/tools/GamesActivity.cpp` (`buildMenu()`); high scores in `src/GameScores.{h,cpp}` (bump `SCORES_FILE_VERSION` when adding fields) |
 | Add gamification feature (goals/streaks/achievements) | `src/gamification/Gamification.h/.cpp`, UI in `src/activities/tools/ReadingGoalsActivity.*` |
-| Regenerate Political Simulator data | `scripts/gen_polsim.mjs` → `src/activities/tools/PoliticalSimData.h` |
 | Add i18n string | `lib/I18n/translations/{english,spanish}.yaml`, then build (auto-generates) |
 | Modify web UI | `src/network/html/` templates, `scripts/build_html.py` regenerates headers |
 | Add sleep screen mode | `src/activities/boot_sleep/SleepActivity.cpp`, `src/CrossPointSettings.h` |
