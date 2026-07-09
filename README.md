@@ -8,10 +8,23 @@ Infinity is a Spanish (Spain) firmware (formerly CrossPet), based on [CrossPoint
 
 ---
 
+## About this fork
+
+**Infinity** is the Spanish (Spain) firmware previously released as **CrossPet**, itself built on top of upstream [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader). This fork:
+
+- **Adds** apps and games that upstream leaves out of scope (2048, Puzzle deslizante, Apagón, Senku), custom SD-card fonts, a background weather widget, extra sleep-screen modes, and a beta BLE keyboard.
+- **Removes / disables** what didn't fit: **Political Simulator** was dropped, and every optional app (Clock, Reading Stats, Reading Goals, Games) can be **turned off** individually in **Settings → CrossPet** — hiding it from both the Tools menu and the home screen. The BLE build additionally disables images and CSS to fit in RAM.
+
+Everything is fully translated to Castilian Spanish.
+
+---
+
 ## What's New in v1.8.4
 
-- **Games submenu** — Tools → Games now groups all games: **2048**, **Political Simulator** (Reigns-style card game), and **Blackout** (new)
-- **Blackout** — a Lights Out logic puzzle. Toggle a cell and its neighbours until every light is off; best-move records are saved
+- **Games submenu** — Tools → Juegos groups all games: **2048**, **Puzzle deslizante** (sliding puzzle), **Apagón** (Lights Out), and **Senku** (peg solitaire). Each keeps its own best-record. _(Political Simulator was removed in this fork.)_
+- **Apagón** — a Lights Out logic puzzle. Toggle a cell and its neighbours until every light is off; fewest-moves records are saved
+- **Senku** — classic peg solitaire; the record tracks the fewest pegs left (1 = a perfect solve)
+- **Libros** — the home screen's "Recientes" list is now a full-library cover grid, relabelled **Libros**
 - **Custom fonts from SD card** — Drop `.bin` fonts into `/fonts/`, select in settings. Dual font model: primary + supplement for mixed scripts (e.g. Latin + CJK). Generate `.bin` files at [xteink.lakafior.com](https://xteink.lakafior.com/)
 - **Bluetooth keyboard (beta)** — Pair a BLE page turner or keyboard. Separate firmware build due to memory constraints
 
@@ -41,7 +54,7 @@ Infinity is a Spanish (Spain) firmware (formerly CrossPet), based on [CrossPoint
 | **Reading Stats** | Session time, streaks, and per-book progress |
 | **Reading Goals** | Daily reading goal, streak with freeze tokens, achievement badges |
 | **OPDS Browser** | Browse & download from Calibre/OPDS |
-| **Games** | 2048, Political Simulator (Reigns-style card game), Blackout (Lights Out puzzle) |
+| **Games** | 2048, Puzzle deslizante (sliding puzzle), Apagón (Lights Out), Senku (peg solitaire) |
 
 Weather (Open-Meteo, no account needed) runs in the background as a home-screen and sleep-screen widget.
 
@@ -119,4 +132,4 @@ See [contributing docs](./docs/contributing/README.md).
 
 ---
 
-CrossPet Reader is **not affiliated with Xteink**. Based on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader).
+Infinity is **not affiliated with Xteink**. Formerly released as CrossPet; based on [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader).
