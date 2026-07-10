@@ -64,6 +64,22 @@ void RecentBooksStore::updateBookProgress(const std::string& path, uint8_t progr
   }
 }
 
+void RecentBooksStore::markAsRead(const std::string& path, const std::string& title, const std::string& author,
+                                  const std::string& coverBmpPath) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it != recentBooks.end()) {
+    it->progressPercent = 100;
+  } else {
+    RecentBook nb{path, title, author, coverBmpPath, 100};
+    if (recentBooks.size() >= MAX_RECENT_BOOKS)
+      recentBooks.back() = nb;  // list full — evict the oldest slot
+    else
+      recentBooks.push_back(nb);
+  }
+  saveToFile();
+}
+
 bool RecentBooksStore::saveToFile() const {
   Storage.mkdir("/.crosspoint");
   return JsonSettingsIO::saveRecentBooks(*this, RECENT_BOOKS_FILE_JSON);

@@ -20,6 +20,11 @@ class RecentBooksActivity final : public Activity {
  private:
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
+  bool markReadTriggered = false;  // Guard against re-firing mark-as-read while Up held
+
+  // Mark the selected book 100% read (long-press Up). Persists, invalidates the
+  // page cache so the progress bar repaints, and shows a confirmation toast.
+  void markSelectedBookRead();
 
   // Full paths of every book discovered on the SD card, sorted by title.
   // Only paths are kept in RAM; titles/covers are derived per visible card to

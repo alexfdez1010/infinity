@@ -1,5 +1,6 @@
 #include "RecentBooksActivity.h"
 
+#include <Arduino.h>
 #include <Epub.h>
 #include <FontDecompressor.h>
 #include <FontManager.h>
@@ -281,17 +282,33 @@ void RecentBooksActivity::loop() {
     return;
   }
 
+  using Button = MappedInputManager::Button;
   buttonNavigator.onNext([this, total] {
     selectorIndex = (selectorIndex + 1) % total;
     ensurePageForIndex();
     requestUpdate();
   });
 
-  buttonNavigator.onPrevious([this, total] {
+  // Left keeps normal "previous"; Up is special-cased so a long-press marks the
+  // selected book read instead of scrolling.
+  buttonNavigator.onPressAndContinuous({Button::Left}, [this, total] {
     selectorIndex = (selectorIndex - 1 + total) % total;
     ensurePageForIndex();
     requestUpdate();
   });
+
+  if (mappedInput.isPressed(Button::Up) && mappedInput.getHeldTime() >= 800 && !markReadTriggered) {
+    markReadTriggered = true;
+    markSelectedBookRead();
+  }
+  if (mappedInput.wasReleased(Button::Up)) {
+    if (!markReadTriggered) {
+      selectorIndex = (selectorIndex - 1 + total) % total;
+      ensurePageForIndex();
+      requestUpdate();
+    }
+    markReadTriggered = false;
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (selectorIndex < total) {
@@ -303,6 +320,20 @@ void RecentBooksActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoHome();
   }
+}
+
+void RecentBooksActivity::markSelectedBookRead() {
+  const int total = static_cast<int>(bookPaths.size());
+  if (selectorIndex < 0 || selectorIndex >= total) return;
+  const std::string& path = bookPaths[selectorIndex];
+  RECENT_BOOKS.markAsRead(path, bookTitle(path), "", "");
+
+  // Brief confirmation, then drop the page cache so the progress bar repaints.
+  GUI.drawPopup(renderer, tr(STR_MARKED_AS_READ));
+  requestUpdateAndWait();
+  delay(900);
+  freePageBuffer();
+  requestUpdate();
 }
 
 void RecentBooksActivity::renderCard(int bookIdx, int gridCol, int gridRow, int cardW, int cardH, int startX,

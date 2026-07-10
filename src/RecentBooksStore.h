@@ -40,6 +40,11 @@ class RecentBooksStore {
 
   void updateBookProgress(const std::string& path, uint8_t progressPercent);
 
+  // Mark a book 100% read. Updates the entry in place if present; otherwise adds
+  // one (without moving it to the front, so it doesn't hijack "continue reading").
+  void markAsRead(const std::string& path, const std::string& title, const std::string& author,
+                  const std::string& coverBmpPath);
+
   // Get the list of recent books (most recent first)
   const std::vector<RecentBook>& getBooks() const { return recentBooks; }
 

@@ -18,6 +18,10 @@ class HomeActivity final : public Activity {
   const char* syncResultMsg = nullptr;  // "OK" or "Failed" after sync
   unsigned long syncResultExpiry = 0;   // millis() when to clear message
   bool syncTriggered = false;      // Guard against re-triggering sync while held
+  bool markReadTriggered = false;  // Guard against re-firing mark-as-read while Up held
+  // Mark the currently selected book as 100% read (long-press Up). No-op when the
+  // selection is not a book. Persists progress, refreshes the card, shows a toast.
+  void markSelectedBookRead();
   bool hasOpdsServers = false;
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored

@@ -558,7 +558,7 @@ void EInkDisplay::drawImage(const uint8_t* imageData, const uint16_t x, const ui
 
 // Draws only black pixels from the image, leaves white pixels clear (unchanged in framebuffer)
 void EInkDisplay::drawImageTransparent(const uint8_t* imageData, const uint16_t x, const uint16_t y, const uint16_t w, const uint16_t h,
-                                     const bool fromProgmem) const {
+                                     const bool fromProgmem, const bool inverted) const {
   if (!frameBuffer) {
     Serial.printf("[%lu]   ERROR: Frame buffer not allocated!\n", millis());
     return;
@@ -581,7 +581,12 @@ void EInkDisplay::drawImageTransparent(const uint8_t* imageData, const uint16_t 
         break;
 
       uint8_t srcByte = fromProgmem ? pgm_read_byte(&imageData[srcOffset + col]) : imageData[srcOffset + col];
-      frameBuffer[destOffset + col] &= srcByte;
+      // Normal: keep white bg, punch black shape pixels (bit 0) → &= srcByte.
+      // Inverted: on a black bg, light the shape pixels white → |= ~srcByte.
+      if (inverted)
+        frameBuffer[destOffset + col] |= static_cast<uint8_t>(~srcByte);
+      else
+        frameBuffer[destOffset + col] &= srcByte;
     }
   }
 

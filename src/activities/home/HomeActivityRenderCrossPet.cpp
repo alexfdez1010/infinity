@@ -1,5 +1,6 @@
 #include "HomeActivity.h"
 
+#include <Arduino.h>
 #include <Bitmap.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -356,9 +357,9 @@ void HomeActivity::renderBottomBarSelection() {
   for (int i = 0; i < CP_BOTTOM_ITEMS; i++) {
     if (selectorIndex == barStart + i) {
       const int x = barPad + i * itemW;
-      // Black fill selection — clear and visible on e-ink
+      // Exact color inverse of the cell: black fill, white icon + white label,
+      // same icon/label layout as the unselected cell (renderBottomBarIcons).
       renderer.fillRoundedRect(x + 2, barY + innerTop - 2, itemW - 4, contentH, CP_BOTTOM_R, Color::Black);
-      // Redraw label in white (icon invisible on black, show label only)
       struct BarItem { const uint8_t* icon; const char* label; };
       const BarItem items[] = {
         {ToolsIcon, tr(STR_APPS)},
@@ -367,10 +368,14 @@ void HomeActivity::renderBottomBarSelection() {
         {Settings2Icon, tr(STR_SETTINGS_TITLE)},
       };
       const int lineH = renderer.getLineHeight(SMALL_FONT_ID);
-      const int labelY = barY + innerTop + (contentH - lineH) / 2;
-      auto label = renderer.truncatedText(SMALL_FONT_ID, items[i].label, itemW - 8);
+      const int totalH = CP_BOTTOM_ICON_SZ + 4 + lineH;
+      const int startY = barY + innerTop + (contentH - totalH) / 2;
+      renderer.drawIconInverted(items[i].icon, x + (itemW - CP_BOTTOM_ICON_SZ) / 2, startY,
+                                CP_BOTTOM_ICON_SZ, CP_BOTTOM_ICON_SZ);
+      auto label = renderer.truncatedText(SMALL_FONT_ID, items[i].label, itemW - 4);
       const int lblW = renderer.getTextWidth(SMALL_FONT_ID, label.c_str());
-      renderer.drawText(SMALL_FONT_ID, x + (itemW - lblW) / 2, labelY, label.c_str(), false);
+      renderer.drawText(SMALL_FONT_ID, x + (itemW - lblW) / 2, startY + CP_BOTTOM_ICON_SZ + 4,
+                        label.c_str(), false);
       break;
     }
   }
@@ -410,14 +415,30 @@ void HomeActivity::loopCrossPet() {
   const int barStart = 1 + recentCount;
   const int itemCount = barStart + CP_BOTTOM_ITEMS;
 
+  using Button = MappedInputManager::Button;
   buttonNavigator.onNext([this, itemCount] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, itemCount);
     requestUpdate();
   });
-  buttonNavigator.onPrevious([this, itemCount] {
+  // Left keeps normal press+continuous "previous". Up is handled separately below
+  // so a long-press can mark the selected book read without also scrolling.
+  buttonNavigator.onPressAndContinuous({Button::Left}, [this, itemCount] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, itemCount);
     requestUpdate();
   });
+
+  // Up: hold = mark selected book read; short press (release) = previous
+  if (mappedInput.isPressed(Button::Up) && mappedInput.getHeldTime() >= 800 && !markReadTriggered) {
+    markReadTriggered = true;
+    markSelectedBookRead();
+  }
+  if (mappedInput.wasReleased(Button::Up)) {
+    if (!markReadTriggered) {
+      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, itemCount);
+      requestUpdate();
+    }
+    markReadTriggered = false;
+  }
 
   // Back long-press = sync
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= 800 && !syncTriggered) {
@@ -445,6 +466,31 @@ void HomeActivity::loopCrossPet() {
       }
     }
   }
+}
+
+// ── Mark selected book as read (long-press Up) ───────────────────────────────
+
+void HomeActivity::markSelectedBookRead() {
+  const bool focusMode = CROSSPET_SETTINGS.homeFocusMode;
+  const int recentCount = focusMode ? 0 : std::max(0, std::min(CP_MAX_RECENT, static_cast<int>(recentBooks.size()) - 1));
+
+  int bookIdx = -1;
+  if (selectorIndex == 0 && !recentBooks.empty())
+    bookIdx = 0;                       // continue-reading card
+  else if (selectorIndex >= 1 && selectorIndex <= recentCount)
+    bookIdx = selectorIndex;           // recent cover
+  if (bookIdx < 0) return;             // selection is a bottom-bar item — no-op
+
+  RecentBook& b = recentBooks[bookIdx];
+  b.progressPercent = 100;
+  RECENT_BOOKS.updateBookProgress(b.path, 100);
+
+  // Brief confirmation toast, then rebuild the card so it shows 100%.
+  GUI.drawPopup(renderer, tr(STR_MARKED_AS_READ));
+  requestUpdateAndWait();
+  delay(900);
+  coverRendered = false;
+  requestUpdate();
 }
 
 // ── Button hints (static, drawn once into buffer) ────────────────────────────
