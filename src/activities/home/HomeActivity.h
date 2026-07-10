@@ -36,6 +36,10 @@ class HomeActivity final : public Activity {
   void freeCoverBuffer();     // Free the stored cover buffer
   void loadRecentBooks(int maxBooks);
   void loadRecentCovers(int coverHeight);
+  // True when a cover-capable book (EPUB/XTC) has no usable on-disk thumb at
+  // this height — including entries whose store cover path is empty and needs
+  // recovery via loadRecentCovers().
+  bool coverThumbMissing(const RecentBook& b, int coverHeight) const;
 
   // Original upstream layout (CLASSIC/LYRA/LYRA_3_COVERS)
   int getMenuItemCount() const;

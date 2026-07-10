@@ -201,8 +201,9 @@ void HomeActivity::renderClassic() {
     firstRenderDone = true;
     bool needsLoad = false;
     for (const auto& b : recentBooks) {
-      if (!b.coverBmpPath.empty() &&
-          !Storage.exists(UITheme::getCoverThumbPath(b.coverBmpPath, CL_COVER_H).c_str())) {
+      // coverThumbMissing also catches entries with an empty store cover path
+      // (BUG-009 poisoned) — those need the loadRecentCovers recovery path too.
+      if (coverThumbMissing(b, CL_COVER_H)) {
         needsLoad = true; break;
       }
     }

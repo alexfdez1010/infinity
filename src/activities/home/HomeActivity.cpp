@@ -83,6 +83,12 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
   }
 }
 
+bool HomeActivity::coverThumbMissing(const RecentBook& b, int coverHeight) const {
+  if (!FsHelpers::hasEpubExtension(b.path) && !FsHelpers::hasXtcExtension(b.path)) return false;
+  if (b.coverBmpPath.empty()) return true;
+  return !Storage.exists(UITheme::getCoverThumbPath(b.coverBmpPath, coverHeight).c_str());
+}
+
 void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
 
@@ -127,11 +133,19 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
       Epub epub(book.path, "/.crosspoint");
       epub.load(false, true);
 
-      if (book.coverBmpPath.empty()) {
+      const bool recoveredPath = book.coverBmpPath.empty();
+      if (recoveredPath) {
         book.coverBmpPath = epub.getThumbBmpPath();
       }
       const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!Storage.exists(coverPath.c_str())) {
+      if (Storage.exists(coverPath.c_str())) {
+        // Thumb already on disk but the store entry was empty — persist the
+        // recovered path so the next home entry takes the fast path instead of
+        // re-loading the Epub every time.
+        if (recoveredPath) {
+          RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.coverBmpPath);
+        }
+      } else {
         if (!showingLoading) { showingLoading = true; popup = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)); }
         GUI.fillPopupProgress(renderer, popup, 10 + progress * (90 / (int)recentBooks.size()));
 
@@ -166,11 +180,16 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
       }
       Xtc xtc(book.path, "/.crosspoint");
       if (xtc.load()) {
-        if (book.coverBmpPath.empty()) {
+        const bool recoveredPath = book.coverBmpPath.empty();
+        if (recoveredPath) {
           book.coverBmpPath = xtc.getThumbBmpPath();
         }
         const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-        if (!Storage.exists(coverPath.c_str())) {
+        if (Storage.exists(coverPath.c_str())) {
+          if (recoveredPath) {
+            RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.coverBmpPath);
+          }
+        } else {
           if (!showingLoading) { showingLoading = true; popup = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)); }
           GUI.fillPopupProgress(renderer, popup, 10 + progress * (90 / (int)recentBooks.size()));
 

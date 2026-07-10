@@ -1,11 +1,18 @@
 #include "RecentBooksActivity.h"
 
 #include <Epub.h>
+#include <FontDecompressor.h>
+#include <FontManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Xtc.h>
+
+extern FontDecompressor fontDecompressor;
+#ifdef ENABLE_BLE
+#include <BluetoothHIDManager.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -175,12 +182,94 @@ void RecentBooksActivity::onEnter() {
   loadLibraryBooks();
   selectorIndex = 0;
   pageOffset = 0;
+  cachedPageOffset = -1;
+  thumbAttempted.clear();
   requestUpdate();
 }
 
 void RecentBooksActivity::onExit() {
   Activity::onExit();
   bookPaths.clear();
+  thumbAttempted.clear();
+  freePageBuffer();
+}
+
+// ── Page frame-buffer cache ───────────────────────────────────────────────────
+
+bool RecentBooksActivity::storePageBuffer() {
+  uint8_t* fb = renderer.getFrameBuffer();
+  if (!fb) return false;
+  const size_t bufSize = renderer.getBufferSize();
+  // Guard: keep 12KB headroom so caching never starves the rest of the heap.
+  if (!pageBuffer && ESP.getFreeHeap() < bufSize + 12 * 1024) return false;
+  if (!pageBuffer) pageBuffer = static_cast<uint8_t*>(malloc(bufSize));
+  if (!pageBuffer) return false;
+  memcpy(pageBuffer, fb, bufSize);
+  return true;
+}
+
+bool RecentBooksActivity::restorePageBuffer() {
+  if (!pageBuffer) return false;
+  uint8_t* fb = renderer.getFrameBuffer();
+  if (!fb) return false;
+  memcpy(fb, pageBuffer, renderer.getBufferSize());
+  return true;
+}
+
+void RecentBooksActivity::freePageBuffer() {
+  if (pageBuffer) { free(pageBuffer); pageBuffer = nullptr; }
+  cachedPageOffset = -1;
+}
+
+// ── Lazy thumbnail generation ─────────────────────────────────────────────────
+
+bool RecentBooksActivity::generateMissingThumb() {
+#ifdef ENABLE_BLE
+  // Same rationale as HomeActivity::loadRecentCovers — decoding covers with an
+  // active BT HID connection risks OOM on the ESP32-C3.
+  if (!BluetoothHIDManager::getInstance().getConnectedDevices().empty()) return false;
+#endif
+
+  const int total = static_cast<int>(bookPaths.size());
+  const int endIdx = std::min(pageOffset + itemsPerPage, total);
+
+  for (int i = pageOffset; i < endIdx; i++) {
+    const std::string& path = bookPaths[i];
+    const std::string thumbPath = coverThumbFor(path);
+    // Empty path = format without covers (TXT/MD). An existing file — even the
+    // empty marker BMP written for books without an embedded cover — means
+    // there is nothing left to do.
+    if (thumbPath.empty() || Storage.exists(thumbPath.c_str())) continue;
+    if (std::find(thumbAttempted.begin(), thumbAttempted.end(), path) != thumbAttempted.end()) continue;
+    thumbAttempted.push_back(path);
+
+    // Free the page cache first: the decoder needs every byte of heap it can
+    // get, and the page must be re-rendered afterwards anyway.
+    freePageBuffer();
+
+    // Free font caches around the decode (same pattern as the home screen):
+    // external glyph cache + JPEGDEC working set together overflow the heap.
+    const bool wasExtLoaded = FontMgr.isExternalFontEnabled() || FontMgr.isUiFontEnabled();
+    if (wasExtLoaded) {
+      fontDecompressor.clearCache();
+      FontMgr.unloadActiveFonts();
+    }
+    if (FsHelpers::hasEpubExtension(path)) {
+      Epub epub(path, CACHE_DIR);
+      // buildIfMissing=true: library books may never have been opened, so the
+      // metadata cache (which generateThumbBmp needs) may not exist yet.
+      epub.load(true, true);
+      epub.generateThumbBmp(THUMB_H);
+    } else if (FsHelpers::hasXtcExtension(path)) {
+      Xtc xtc(path, CACHE_DIR);
+      if (xtc.load()) xtc.generateThumbBmp(THUMB_H);
+    }
+    if (wasExtLoaded) {
+      FontMgr.reloadActiveFonts();
+    }
+    return true;  // one attempt per render pass keeps the UI responsive
+  }
+  return false;
 }
 
 void RecentBooksActivity::loop() {
@@ -217,7 +306,7 @@ void RecentBooksActivity::loop() {
 }
 
 void RecentBooksActivity::renderCard(int bookIdx, int gridCol, int gridRow, int cardW, int cardH, int startX,
-                                     int startY, bool selected) {
+                                     int startY) {
   const int lineH = renderer.getLineHeight(SMALL_FONT_ID);
   const int titleAreaH = TITLE_LINES * lineH + 4;
   const int rowH = cardH + titleAreaH + 12;
@@ -227,18 +316,18 @@ void RecentBooksActivity::renderCard(int bookIdx, int gridCol, int gridRow, int 
 
   const std::string& path = bookPaths[bookIdx];
   const std::string thumbPath = coverThumbFor(path);
-  const bool hasCover = !thumbPath.empty() && Storage.exists(thumbPath.c_str());
 
-  // Soft drop shadow for a touch of depth (skipped when selected — the bold
-  // frame already lifts the card off the page).
-  if (!selected) {
-    renderer.fillRoundedRect(cx + 2, cy + 3, cardW, cardH, COVER_R, Color::LightGray);
-  }
+  // Soft drop shadow for a touch of depth.
+  renderer.fillRoundedRect(cx + 2, cy + 3, cardW, cardH, COVER_R, Color::LightGray);
 
   // Card surface.
   renderer.fillRoundedRect(cx, cy, cardW, cardH, COVER_R, Color::White);
 
-  if (hasCover) {
+  // Draw the cached cover if it exists AND parses — the empty marker BMP
+  // (written for books without an embedded cover) fails parseHeaders and must
+  // fall through to the placeholder instead of leaving a blank card.
+  bool coverDrawn = false;
+  if (!thumbPath.empty() && Storage.exists(thumbPath.c_str())) {
     FsFile f;
     if (Storage.openFileForRead("RBA", thumbPath, f)) {
       Bitmap bmp(f);
@@ -246,11 +335,14 @@ void RecentBooksActivity::renderCard(int bookIdx, int gridCol, int gridRow, int 
         const int bmpW = std::min((int)bmp.getWidth(), cardW - 4);
         const int bmpH = std::min((int)bmp.getHeight(), cardH - 4);
         renderer.drawBitmap(bmp, cx + (cardW - bmpW) / 2, cy + (cardH - bmpH) / 2, bmpW, bmpH);
+        coverDrawn = true;
       }
       f.close();
     }
-  } else {
-    // No cached cover: a titled placeholder that still reads as a book spine.
+  }
+
+  if (!coverDrawn) {
+    // No usable cover: a titled placeholder that still reads as a book spine.
     renderer.fillRoundedRect(cx, cy, cardW, cardH, COVER_R, Color::LightGray);
     renderer.fillRect(cx + 7, cy + 8, 4, cardH - 16, true);  // spine accent
 
@@ -276,80 +368,109 @@ void RecentBooksActivity::renderCard(int bookIdx, int gridCol, int gridRow, int 
     if (fillW > 2) renderer.fillRoundedRect(barX, barY, fillW, barH, barH / 2, Color::Black);
   }
 
-  // Card frame — bold when selected.
-  renderer.drawRoundedRect(cx, cy, cardW, cardH, selected ? 3 : 1, COVER_R, true);
+  // Card frame.
+  renderer.drawRoundedRect(cx, cy, cardW, cardH, 1, COVER_R, true);
 
-  // Title below the card (up to TITLE_LINES lines, centered, bold when selected).
-  const auto titleStyle = selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+  // Title below the card (up to TITLE_LINES lines, centered).
   const auto titleLines = wrapLines(renderer, SMALL_FONT_ID, bookTitle(path), cardW - 2, TITLE_LINES);
   int titleY = cy + cardH + lineH;
   for (const auto& l : titleLines) {
-    const int lw = renderer.getTextWidth(SMALL_FONT_ID, l.c_str(), titleStyle);
-    renderer.drawText(SMALL_FONT_ID, cx + (cardW - lw) / 2, titleY, l.c_str(), true, titleStyle);
+    const int lw = renderer.getTextWidth(SMALL_FONT_ID, l.c_str());
+    renderer.drawText(SMALL_FONT_ID, cx + (cardW - lw) / 2, titleY, l.c_str(), true);
     titleY += lineH;
   }
 }
 
-void RecentBooksActivity::render(RenderLock&&) {
-  renderer.clearScreen();
+void RecentBooksActivity::renderSelectionRing(int cardW, int cardH, int startX, int startY) {
+  const int localIdx = selectorIndex - pageOffset;
+  if (localIdx < 0 || localIdx >= itemsPerPage) return;
 
+  const int lineH = renderer.getLineHeight(SMALL_FONT_ID);
+  const int titleAreaH = TITLE_LINES * lineH + 4;
+  const int rowH = cardH + titleAreaH + 12;
+
+  const int cx = startX + (localIdx % COLS) * (cardW + COVER_GAP);
+  const int cy = startY + (localIdx / COLS) * rowH;
+  renderer.drawRoundedRect(cx - 3, cy - 3, cardW + 6, cardH + 6, 2, COVER_R + 3, true);
+}
+
+void RecentBooksActivity::render(RenderLock&&) {
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  // Header shows the library size so the user knows the whole shelf is here.
-  std::string header = tr(STR_MENU_RECENT_BOOKS);
-  if (!bookPaths.empty()) {
-    header += " (" + std::to_string(bookPaths.size()) + ")";
-  }
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, header.c_str());
-
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
-  if (bookPaths.empty()) {
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_RECENT_BOOKS));
+  // Grid layout, horizontally centered within the content area.
+  const int sidePad = 16;
+  const int areaW = pageWidth - 2 * sidePad;
+  const int totalGapW = COVER_GAP * (COLS - 1);
+  const int cardW = (areaW - totalGapW) / COLS;
+  const int cardH = (int)(cardW * 1.4f);
+
+  const int lineH = renderer.getLineHeight(SMALL_FONT_ID);
+  const int titleAreaH = TITLE_LINES * lineH + 4;
+  const int rowH = cardH + titleAreaH + 12;
+  const int rows = std::max(1, contentHeight / rowH);
+  itemsPerPage = std::max(1, rows * COLS);
+
+  // Center the used grid width so the shelf sits balanced on the page.
+  const int usedW = COLS * cardW + totalGapW;
+  const int startX = (pageWidth - usedW) / 2;
+  const int startY = contentTop + 4;
+
+  // Fast path: same page already rendered into the cache — restore it and only
+  // redraw the selection ring below. Skips re-reading every cover BMP from SD.
+  if (pageBuffer && cachedPageOffset == pageOffset && restorePageBuffer()) {
+    // Cached page restored; nothing else to draw except the selection ring.
   } else {
-    // Grid layout, horizontally centered within the content area.
-    const int sidePad = 16;
-    const int areaW = pageWidth - 2 * sidePad;
-    const int totalGapW = COVER_GAP * (COLS - 1);
-    const int cardW = (areaW - totalGapW) / COLS;
-    const int cardH = (int)(cardW * 1.4f);
+    renderer.clearScreen();
 
-    const int lineH = renderer.getLineHeight(SMALL_FONT_ID);
-    const int titleAreaH = TITLE_LINES * lineH + 4;
-    const int rowH = cardH + titleAreaH + 12;
-    const int rows = std::max(1, contentHeight / rowH);
-    itemsPerPage = std::max(1, rows * COLS);
+    // Header shows the library size so the user knows the whole shelf is here.
+    std::string header = tr(STR_MENU_RECENT_BOOKS);
+    if (!bookPaths.empty()) {
+      header += " (" + std::to_string(bookPaths.size()) + ")";
+    }
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, header.c_str());
 
-    // Center the used grid width so the shelf sits balanced on the page.
-    const int usedW = COLS * cardW + totalGapW;
-    const int startX = (pageWidth - usedW) / 2;
-    const int startY = contentTop + 4;
+    if (bookPaths.empty()) {
+      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_RECENT_BOOKS));
+    } else {
+      const int total = static_cast<int>(bookPaths.size());
+      const int endIdx = std::min(pageOffset + itemsPerPage, total);
 
-    const int total = static_cast<int>(bookPaths.size());
-    const int endIdx = std::min(pageOffset + itemsPerPage, total);
+      for (int i = pageOffset; i < endIdx; i++) {
+        const int localIdx = i - pageOffset;
+        renderCard(i, localIdx % COLS, localIdx / COLS, cardW, cardH, startX, startY);
+      }
 
-    for (int i = pageOffset; i < endIdx; i++) {
-      const int localIdx = i - pageOffset;
-      const int col = localIdx % COLS;
-      const int row = localIdx / COLS;
-      renderCard(i, col, row, cardW, cardH, startX, startY, i == selectorIndex);
+      // Centered page indicator when the library spans multiple pages.
+      if (totalPages() > 1) {
+        char pageStr[16];
+        snprintf(pageStr, sizeof(pageStr), "%d / %d", (pageOffset / itemsPerPage) + 1, totalPages());
+        const int pw = renderer.getTextWidth(SMALL_FONT_ID, pageStr);
+        renderer.drawText(SMALL_FONT_ID, (pageWidth - pw) / 2,
+                          pageHeight - metrics.buttonHintsHeight - 14, pageStr, true);
+      }
     }
 
-    // Centered page indicator when the library spans multiple pages.
-    if (totalPages() > 1) {
-      char pageStr[16];
-      snprintf(pageStr, sizeof(pageStr), "%d / %d", (selectorIndex / itemsPerPage) + 1, totalPages());
-      const int pw = renderer.getTextWidth(SMALL_FONT_ID, pageStr);
-      renderer.drawText(SMALL_FONT_ID, (pageWidth - pw) / 2,
-                        pageHeight - metrics.buttonHintsHeight - 14, pageStr, true);
-    }
+    const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+    if (storePageBuffer()) cachedPageOffset = pageOffset;
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (!bookPaths.empty()) {
+    renderSelectionRing(cardW, cardH, startX, startY);
+  }
 
   renderer.displayBuffer();
+
+  // Post-render: lazily generate one missing thumbnail for the visible page,
+  // then repaint — covers pop in progressively without blocking the first
+  // paint. Failed decodes are remembered per session so this converges.
+  if (generateMissingThumb()) {
+    requestUpdate();
+  }
 }
