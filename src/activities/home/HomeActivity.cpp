@@ -106,13 +106,14 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   }
 #endif
 
-  Rect popup;
-  bool showingLoading = false;
-  bool anyChanged = false;
-  int progress = 0;
-
+  // One cover per render pass. Loading the whole strip in a single blocking
+  // batch froze the home screen while every missing thumb decoded (JPEG/PNG
+  // decode + Epub load, ~1-2s each). Instead we resolve exactly ONE book that
+  // needs heavy work per call, repaint, then let the next render pass pick up
+  // the following one — covers pop in progressively, same as the Libros list
+  // (RecentBooksActivity::generateMissingThumb). recentsLoaded stays false until
+  // a full scan finds nothing left to do, so the render loop keeps calling us.
   for (RecentBook& book : recentBooks) {
-    bool generated = false;
     if (FsHelpers::hasEpubExtension(book.path)) {
       // Fast path: if both cover store entry and on-disk thumb already exist,
       // skip Epub load entirely. Loading Epub allocates ~10-20KB (OPF parse +
@@ -122,11 +123,15 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
       // after KOReader sync). Only pay the load cost when recovery is needed.
       if (!book.coverBmpPath.empty()) {
         const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-        if (Storage.exists(coverPath.c_str())) {
-          progress++;
-          continue;
-        }
+        if (Storage.exists(coverPath.c_str())) continue;
       }
+
+      // Heavy work needed (recovery load and/or decode). Attempt each book at
+      // most once per session so a failed decode doesn't loop forever.
+      if (std::find(recentsAttempted.begin(), recentsAttempted.end(), book.path) != recentsAttempted.end()) {
+        continue;
+      }
+      recentsAttempted.push_back(book.path);
 
       // Slow path: cover store entry is empty (BUG-009 poisoned) or thumb is
       // missing on disk. Load Epub to derive cover path / regenerate thumb.
@@ -146,9 +151,6 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.coverBmpPath);
         }
       } else {
-        if (!showingLoading) { showingLoading = true; popup = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)); }
-        GUI.fillPopupProgress(renderer, popup, 10 + progress * (90 / (int)recentBooks.size()));
-
         // Free font caches around JPEG decode: external font glyph cache
         // (~34KB) + JPEGDEC working set (~33KB) overflows residual heap on
         // ESP32-C3, causing decode to abort with "no cover" when external
@@ -158,26 +160,33 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           fontDecompressor.clearCache();
           FontMgr.unloadActiveFonts();
         }
-        generated = epub.generateThumbBmp(coverHeight);
+        const bool generated = epub.generateThumbBmp(coverHeight);
         if (wasExtLoaded) {
           FontMgr.reloadActiveFonts();
         }
-
         if (generated) {
           RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.coverBmpPath);
         }
-        coverRendered = false;
-        requestUpdate();
       }
+
+      // One unit of heavy work done — repaint so this cover appears, then bail.
+      // recentsLoading is cleared so the next render pass re-enters for the
+      // following book; recentsLoaded stays false until nothing is left.
+      recentsLoading = false;
+      coverRendered = false;
+      requestUpdate();
+      return;
     } else if (FsHelpers::hasXtcExtension(book.path)) {
       // Same fast path for XTC: skip load when thumb already cached.
       if (!book.coverBmpPath.empty()) {
         const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-        if (Storage.exists(coverPath.c_str())) {
-          progress++;
-          continue;
-        }
+        if (Storage.exists(coverPath.c_str())) continue;
       }
+      if (std::find(recentsAttempted.begin(), recentsAttempted.end(), book.path) != recentsAttempted.end()) {
+        continue;
+      }
+      recentsAttempted.push_back(book.path);
+
       Xtc xtc(book.path, "/.crosspoint");
       if (xtc.load()) {
         const bool recoveredPath = book.coverBmpPath.empty();
@@ -190,35 +199,32 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.coverBmpPath);
           }
         } else {
-          if (!showingLoading) { showingLoading = true; popup = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)); }
-          GUI.fillPopupProgress(renderer, popup, 10 + progress * (90 / (int)recentBooks.size()));
-
           const bool wasExtLoaded = FontMgr.isExternalFontEnabled() || FontMgr.isUiFontEnabled();
           if (wasExtLoaded) {
             fontDecompressor.clearCache();
             FontMgr.unloadActiveFonts();
           }
-          generated = xtc.generateThumbBmp(coverHeight);
+          const bool generated = xtc.generateThumbBmp(coverHeight);
           if (wasExtLoaded) {
             FontMgr.reloadActiveFonts();
           }
-
           if (generated) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, book.coverBmpPath);
           }
         }
       }
+
+      recentsLoading = false;
+      coverRendered = false;
+      requestUpdate();
+      return;
     }
-    if (generated) anyChanged = true;
-    progress++;
   }
 
+  // Full scan completed with no heavy work left — every cover is cached (or was
+  // attempted this session). Stop the render loop from calling us again.
   recentsLoaded = true;
   recentsLoading = false;
-  if (anyChanged) {
-    coverRendered = false;
-    requestUpdate();
-  }
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -233,6 +239,7 @@ void HomeActivity::onEnter() {
   firstRenderDone = false;
   recentsLoaded = false;
   recentsLoading = false;
+  recentsAttempted.clear();
   loadRecentBooks(4);
   requestUpdate();
 }

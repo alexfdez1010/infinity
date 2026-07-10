@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <string>
 #include <vector>
 
 #include "../Activity.h"
@@ -13,6 +14,9 @@ class HomeActivity final : public Activity {
   int selectorIndex = 0;
   bool recentsLoading = false;
   bool recentsLoaded = false;
+  // Books whose cover decode was attempted this session (one-per-pass lazy load).
+  // Prevents a failed/absent-cover book from being retried on every render pass.
+  std::vector<std::string> recentsAttempted;
   bool firstRenderDone = false;
   bool weatherRefreshing = false;  // Show "refreshing" status on screen
   const char* syncResultMsg = nullptr;  // "OK" or "Failed" after sync
