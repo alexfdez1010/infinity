@@ -162,6 +162,8 @@ void ReaderActivity::onEnter() {
   } else {
     auto epub = loadEpub(initialBookPath);
     if (!epub) {
+      LOG_ERR("READER", "loadEpub FAILED for '%s' (freeHeap=%u) — bouncing out of reader",
+              initialBookPath.c_str(), (unsigned)ESP.getFreeHeap());
       showMemoryErrorIfBleActive();
       onGoBack();
       return;

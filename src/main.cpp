@@ -524,10 +524,11 @@ void setup() {
     activityManager.goToReader(path);
   }
 
-  // Opportunistic background NTP resync: only fires when the clock is approximate
-  // (restored from drift-prone RC timer) and the last sync is >12h old. Runs after
-  // the wake-reason switch so abort-to-sleep paths never start the radio.
-  OpportunisticTimeSync::maybeStart();
+  // NOTE: background NTP resync is intentionally NOT started here. Bringing up
+  // WiFi + TLS (~needs a big chunk of the ~68KB free heap) at the same instant a
+  // book is loading on wake starved the reader's allocations, so loadEpub() OOM'd
+  // and bounced the resume to Home. The sync is now deferred to the main loop
+  // (~90s after boot) so the reader finishes loading first. See loop().
 
   // Ensure we're not still holding the power button before leaving setup.
   waitForPowerRelease();
@@ -665,14 +666,28 @@ void loop() {
     activityManager.requestUpdate();
   }
 
-  // Retry the background NTP sync while the clock is still approximate (e.g. WiFi
-  // unreachable on wake). maybeStart() no-ops when synced, connected, or rate-limited.
+  // Background NTP sync, deferred so it never competes with a book loading on
+  // wake. First attempt fires ~90s after boot (reader has long since loaded by
+  // then); afterwards it retries every 15 min while the clock is still
+  // approximate (e.g. WiFi was unreachable on the first try). maybeStart()
+  // no-ops when already synced, connected, or in manual clock mode.
   {
+    static bool firstNtpDone = false;
     static unsigned long lastNtpRetryMs = 0;
+    constexpr unsigned long NTP_FIRST_DELAY_MS = 90UL * 1000UL;
     constexpr unsigned long NTP_RETRY_INTERVAL_MS = 15UL * 60UL * 1000UL;
-    if (g_clockApproximate && millis() - lastNtpRetryMs >= NTP_RETRY_INTERVAL_MS) {
-      lastNtpRetryMs = millis();
-      OpportunisticTimeSync::maybeStart();
+    const unsigned long nowMs = millis();
+    if (g_clockApproximate) {
+      if (!firstNtpDone) {
+        if (nowMs >= NTP_FIRST_DELAY_MS) {
+          firstNtpDone = true;
+          lastNtpRetryMs = nowMs;
+          OpportunisticTimeSync::maybeStart();
+        }
+      } else if (nowMs - lastNtpRetryMs >= NTP_RETRY_INTERVAL_MS) {
+        lastNtpRetryMs = nowMs;
+        OpportunisticTimeSync::maybeStart();
+      }
     }
   }
 
