@@ -4,9 +4,12 @@
 //
 // The ESP32-C3 has no battery-backed RTC: after deep sleep the clock is restored
 // from the drift-prone internal RC timer (g_clockApproximate). When the last NTP
-// sync is stale, this module silently connects to the last-used WiFi network in a
-// short-lived background task, syncs time, and switches the radio back off.
-// Zero impact on sleep current — it only runs while the user woke the device anyway.
+// sync is stale, this module silently scans for saved WiFi networks (falling back
+// to a blind connect to the last-used one, for hidden SSIDs) in a short-lived
+// background task, syncs time, and switches the radio back off. Skipped entirely
+// in manual clock mode. Zero impact on sleep current — it only runs while the
+// user woke the device anyway. main.cpp also retries it periodically while the
+// clock is still approximate (e.g. WiFi unreachable on wake).
 namespace OpportunisticTimeSync {
 
 // Call once at boot, after clock restore + TZ setup and once the device has

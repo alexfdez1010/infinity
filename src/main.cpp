@@ -143,11 +143,13 @@ bool g_clockApproximate = false;
 // 0 after a cold boot, which OpportunisticTimeSync treats as "stale, sync now".
 RTC_DATA_ATTR uint32_t g_lastNtpSyncUnix = 0;
 
-// SNTP callback — clears approximate flag when NTP sync completes
+// SNTP callback — clears approximate flag when NTP sync completes.
+// Runs in the lwIP task; requestUpdate() without `immediate` only sets a flag, safe here.
 static void onNtpSyncComplete(struct timeval* tv) {
   g_clockApproximate = false;
   g_lastNtpSyncUnix = (uint32_t)time(nullptr);
   LOG_DBG("NTP", "Time synced, clock is now accurate");
+  activityManager.requestUpdate();
 }
 
 // SD-based clock backup — reliable fallback when RTC_DATA_ATTR is lost on ESP32-C3.
@@ -452,21 +454,9 @@ void setup() {
     g_rtcSleepMagic = 0;  // consume — next boot treats as cold boot unless we sleep again
   }
 
-  // Load cached timezone from weather data, fallback to Europe/Madrid (CET/CEST).
+  // Apply the configured timezone (settings-driven, defaults to Europe/Madrid CET/CEST).
   // This must happen after settimeofday() and before any localtime_r() calls.
-  {
-    char cachedTz[32] = "CET-1CEST,M3.5.0,M10.5.0/3";
-    String content = Storage.readFile("/.crosspoint/weather_cache.json");
-    if (!content.isEmpty()) {
-      JsonDocument tzDoc;
-      if (!deserializeJson(tzDoc, content)) {
-        const char* tz = tzDoc["tz"] | "";
-        if (tz[0]) strncpy(cachedTz, tz, sizeof(cachedTz) - 1);
-      }
-    }
-    setenv("TZ", cachedTz, 1);
-    tzset();
-  }
+  CrossPointSettings::applyTimezone();
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
@@ -665,6 +655,17 @@ void loop() {
   // Refresh battery icon when USB is plugged or unplugged
   if (gpio.wasUsbStateChanged()) {
     activityManager.requestUpdate();
+  }
+
+  // Retry the background NTP sync while the clock is still approximate (e.g. WiFi
+  // unreachable on wake). maybeStart() no-ops when synced, connected, or rate-limited.
+  {
+    static unsigned long lastNtpRetryMs = 0;
+    constexpr unsigned long NTP_RETRY_INTERVAL_MS = 15UL * 60UL * 1000UL;
+    if (g_clockApproximate && millis() - lastNtpRetryMs >= NTP_RETRY_INTERVAL_MS) {
+      lastNtpRetryMs = millis();
+      OpportunisticTimeSync::maybeStart();
+    }
   }
 
   const unsigned long activityStartTime = millis();

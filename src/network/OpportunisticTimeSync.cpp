@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <ctime>
 
+#include "CrossPointSettings.h"
 #include "WifiCredentialStore.h"
 
 // Defined in main.cpp
@@ -16,39 +17,61 @@ extern uint32_t g_lastNtpSyncUnix;
 
 namespace {
 constexpr uint32_t STALE_AFTER_SECS = 12UL * 3600;  // resync at most twice a day
-constexpr int CONNECT_TIMEOUT_DS = 150;             // 15 s in 100 ms steps
+constexpr int CONNECT_TIMEOUT_DS = 100;             // 10 s in 100 ms steps, per network
 constexpr int SYNC_TIMEOUT_DS = 150;                // 15 s in 100 ms steps
+constexpr int MAX_NETWORK_ATTEMPTS = 3;
 
 std::atomic<bool> taskActive{false};
 std::atomic<bool> foregroundClaimed{false};
 
+// Connect to `cred` and wait for association. Returns true when connected.
+bool connectTo(const WifiCredential& cred) {
+  LOG_DBG("TSYNC", "Background NTP sync: connecting to %s", cred.ssid.c_str());
+  WiFi.begin(cred.ssid.c_str(), cred.password.c_str());
+  for (int i = 0; i < CONNECT_TIMEOUT_DS && !foregroundClaimed; i++) {
+    if (WiFi.status() == WL_CONNECTED) return true;
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+  return WiFi.status() == WL_CONNECTED;
+}
+
 void syncTask(void*) {
-  const auto& ssid = WIFI_STORE.getLastConnectedSsid();
-  const auto* cred = ssid.empty() ? nullptr : WIFI_STORE.findCredential(ssid);
   bool synced = false;
+  bool connected = false;
 
-  if (cred && !foregroundClaimed) {
-    LOG_DBG("TSYNC", "Background NTP sync: connecting to %s", cred->ssid.c_str());
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+  WiFi.mode(WIFI_STA);
 
-    for (int i = 0; i < CONNECT_TIMEOUT_DS && !foregroundClaimed; i++) {
-      if (WiFi.status() == WL_CONNECTED) break;
-      vTaskDelay(pdMS_TO_TICKS(100));
-    }
+  // Scan and try saved networks strongest-first (scan results come RSSI-sorted).
+  // Falls back to a blind connect to the last-used network below — hidden SSIDs
+  // don't show up in a scan.
+  const int found = foregroundClaimed ? 0 : WiFi.scanNetworks();
+  int attempts = 0;
+  for (int i = 0; i < found && !connected && !foregroundClaimed && attempts < MAX_NETWORK_ATTEMPTS; i++) {
+    const auto* cred = WIFI_STORE.findCredential(WiFi.SSID(i).c_str());
+    if (!cred) continue;
+    attempts++;
+    connected = connectTo(*cred);
+    if (!connected) WiFi.disconnect(false);
+  }
+  WiFi.scanDelete();
 
-    if (WiFi.status() == WL_CONNECTED && !foregroundClaimed) {
-      // configTzTime starts SNTP; onNtpSyncComplete (main.cpp) clears
-      // g_clockApproximate and stamps g_lastNtpSyncUnix when the reply lands
-      const char* tz = getenv("TZ");
-      configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
-      for (int i = 0; i < SYNC_TIMEOUT_DS && !foregroundClaimed; i++) {
-        if (!g_clockApproximate) {
-          synced = true;
-          break;
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
+  if (!connected && attempts == 0 && !foregroundClaimed) {
+    const auto& ssid = WIFI_STORE.getLastConnectedSsid();
+    const auto* cred = ssid.empty() ? nullptr : WIFI_STORE.findCredential(ssid);
+    if (cred) connected = connectTo(*cred);
+  }
+
+  if (connected && !foregroundClaimed) {
+    // configTzTime starts SNTP; onNtpSyncComplete (main.cpp) clears
+    // g_clockApproximate and stamps g_lastNtpSyncUnix when the reply lands
+    const char* tz = getenv("TZ");
+    configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
+    for (int i = 0; i < SYNC_TIMEOUT_DS && !foregroundClaimed; i++) {
+      if (!g_clockApproximate) {
+        synced = true;
+        break;
       }
+      vTaskDelay(pdMS_TO_TICKS(100));
     }
   }
 
@@ -71,6 +94,7 @@ namespace OpportunisticTimeSync {
 void maybeStart() {
   if (taskActive) return;
   if (!g_clockApproximate) return;  // clock already NTP-accurate this boot
+  if (SETTINGS.clockMode == CrossPointSettings::CLOCK_MANUAL) return;  // user manages time by hand
   if (WiFi.status() == WL_CONNECTED) return;
 
   // Rate limit: skip when the last sync is recent. g_lastNtpSyncUnix lives in
@@ -82,7 +106,7 @@ void maybeStart() {
   }
 
   WIFI_STORE.loadFromFile();
-  if (WIFI_STORE.getLastConnectedSsid().empty()) return;
+  if (WIFI_STORE.getCredentials().empty()) return;
 
   foregroundClaimed = false;
   taskActive = true;

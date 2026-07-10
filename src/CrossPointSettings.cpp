@@ -5,7 +5,9 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <string>
 
 #include "fontIds.h"
@@ -296,6 +298,33 @@ int CrossPointSettings::getRefreshFrequency() const {
     case REFRESH_MANUAL:
       return 0;  // Never auto full-refresh
   }
+}
+
+const char* CrossPointSettings::getTimezonePosix(uint8_t tz) {
+  switch (tz) {
+    case TZ_CANARIAS:
+      return "WET0WEST,M3.5.0/1,M10.5.0";
+    case TZ_LONDRES:
+      return "GMT0BST,M3.5.0/1,M10.5.0";
+    case TZ_UTC:
+      return "UTC0";
+    case TZ_MEXICO:
+      return "CST6";
+    case TZ_BOGOTA_LIMA:
+      return "<-05>5";
+    case TZ_BUENOS_AIRES:
+      return "<-03>3";
+    case TZ_NUEVA_YORK:
+      return "EST5EDT,M3.2.0,M11.1.0";
+    case TZ_MADRID:
+    default:
+      return "CET-1CEST,M3.5.0,M10.5.0/3";
+  }
+}
+
+void CrossPointSettings::applyTimezone() {
+  setenv("TZ", getTimezonePosix(getInstance().timezone), 1);
+  tzset();
 }
 
 int CrossPointSettings::getReaderFontId() const {

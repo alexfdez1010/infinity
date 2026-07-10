@@ -60,6 +60,7 @@ void SettingsActivity::onEnter() {
       if (setting.nameId == StrId::STR_SLEEP_REFRESH) continue;
       if (setting.nameId == StrId::STR_TEMP_UNIT) continue;
       if (setting.nameId == StrId::STR_CLOCK_MODE) continue;  // already in CrossPet CLOCK section
+      if (setting.nameId == StrId::STR_TIMEZONE) continue;    // already in CrossPet CLOCK section
       // Sleep screen mode → replaced by Action that opens SleepImagePickerActivity
       if (setting.nameId == StrId::STR_SLEEP_SCREEN) continue;
       // Cover mode/filter → managed in SleepImagePickerActivity
@@ -116,6 +117,10 @@ void SettingsActivity::onEnter() {
   appsSettings.push_back(SettingInfo::Section("CLOCK (Beta)"));
   appsSettings.push_back(SettingInfo::Enum(StrId::STR_CLOCK_MODE, &CrossPointSettings::clockMode,
       {StrId::STR_CLOCK_NTP, StrId::STR_CLOCK_MANUAL}, "clockMode", StrId::STR_CROSSPET));
+  appsSettings.push_back(SettingInfo::Enum(StrId::STR_TIMEZONE, &CrossPointSettings::timezone,
+      {StrId::STR_TZ_MADRID, StrId::STR_TZ_CANARIAS, StrId::STR_TZ_LONDRES, StrId::STR_TZ_UTC,
+       StrId::STR_TZ_MEXICO, StrId::STR_TZ_BOGOTA_LIMA, StrId::STR_TZ_BUENOS_AIRES, StrId::STR_TZ_NUEVA_YORK},
+      "timezone", StrId::STR_CROSSPET));
   // keepClockAlive and sleepRefreshInterval removed — drain ~3-4mA in deep sleep
 
   // OPTIONS section: CrossPet-specific global settings
@@ -271,6 +276,7 @@ void SettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+    if (setting.valuePtr == &CrossPointSettings::timezone) CrossPointSettings::applyTimezone();
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
     // DynamicEnum: backed by external getter/setter
     const uint8_t currentValue = setting.valueGetter();

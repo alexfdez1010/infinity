@@ -8,6 +8,8 @@
 #include <WiFi.h>
 #include <esp_sntp.h>
 
+#include <cstdlib>
+
 #include "CrossPointSettings.h"
 #include "WifiCredentialStore.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -135,8 +137,11 @@ void WeatherActivity::onWifiConnected() {
     }
   }
 
-  // Use detected timezone (or default Europe/Madrid) for NTP sync
-  configTzTime(detectedTz, "pool.ntp.org", "time.google.com");
+  // Kick off an NTP sync with the configured timezone (skip in manual clock mode)
+  if (SETTINGS.clockMode == CrossPointSettings::CLOCK_NTP) {
+    const char* tz = getenv("TZ");
+    configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
+  }
 
   state = FETCHING;
   statusMessage = tr(STR_FETCHING_WEATHER);
@@ -144,20 +149,9 @@ void WeatherActivity::onWifiConnected() {
   fetchWeather();
 }
 
-// Build POSIX TZ string from UTC offset in seconds (e.g. 3600 → "UTC-1")
-// POSIX sign convention is reversed: UTC+1 → sign negative in TZ string
-static void buildPosixTz(int offsetSeconds, char* buf, size_t len) {
-  int offsetHours = offsetSeconds / 3600;
-  int offsetMins = (offsetSeconds < 0 ? -offsetSeconds : offsetSeconds) % 3600 / 60;
-  if (offsetMins)
-    snprintf(buf, len, "UTC%+d:%02d", -offsetHours, offsetMins);
-  else
-    snprintf(buf, len, "UTC%+d", -offsetHours);
-}
-
 bool WeatherActivity::detectLocation() {
   std::string response;
-  if (!HttpDownloader::fetchUrl("http://ip-api.com/json/?fields=lat,lon,city,offset", response)) {
+  if (!HttpDownloader::fetchUrl("http://ip-api.com/json/?fields=lat,lon,city", response)) {
     return false;
   }
 
@@ -167,7 +161,6 @@ bool WeatherActivity::detectLocation() {
   float lat = doc["lat"] | 0.0f;
   float lon = doc["lon"] | 0.0f;
   const char* city = doc["city"] | "";
-  int offset = doc["offset"] | 3600;  // default UTC+1 (Spain winter)
 
   if (lat == 0.0f && lon == 0.0f) return false;
 
@@ -175,9 +168,8 @@ bool WeatherActivity::detectLocation() {
   snprintf(detectedLon, sizeof(detectedLon), "%.4f", lon);
   strncpy(detectedCityName, city, sizeof(detectedCityName) - 1);
   detectedCityName[sizeof(detectedCityName) - 1] = '\0';
-  buildPosixTz(offset, detectedTz, sizeof(detectedTz));
 
-  LOG_DBG("WEATHER", "IP geolocation: %s (%.4f, %.4f) TZ=%s", detectedCityName, lat, lon, detectedTz);
+  LOG_DBG("WEATHER", "IP geolocation: %s (%.4f, %.4f)", detectedCityName, lat, lon);
   return true;
 }
 
@@ -308,7 +300,6 @@ void WeatherActivity::saveWeatherCache() {
     doc["autoLat"] = detectedLat;
     doc["autoLon"] = detectedLon;
   }
-  doc["tz"] = detectedTz;
 
   String json;
   serializeJson(doc, json);
@@ -381,17 +372,15 @@ int WeatherActivity::silentRefresh() {
   char autoLat[16] = "";
   char autoLon[16] = "";
   char autoCity[32] = "";
-  char tz[32] = "CET-1CEST,M3.5.0,M10.5.0/3";  // POSIX TZ, detected from ip-api offset (default Europe/Madrid)
 
   if (city == 0) {
     std::string geoResponse;
-    if (HttpDownloader::fetchUrl("http://ip-api.com/json/?fields=lat,lon,city,offset", geoResponse)) {
+    if (HttpDownloader::fetchUrl("http://ip-api.com/json/?fields=lat,lon,city", geoResponse)) {
       JsonDocument geoDoc;
       if (!deserializeJson(geoDoc, geoResponse)) {
         float gLat = geoDoc["lat"] | 0.0f;
         float gLon = geoDoc["lon"] | 0.0f;
         const char* gCity = geoDoc["city"] | "";
-        int gOffset = geoDoc["offset"] | 3600;
         if (gLat != 0.0f || gLon != 0.0f) {
           snprintf(autoLat, sizeof(autoLat), "%.4f", gLat);
           snprintf(autoLon, sizeof(autoLon), "%.4f", gLon);
@@ -399,7 +388,6 @@ int WeatherActivity::silentRefresh() {
           lat = autoLat;
           lon = autoLon;
         }
-        buildPosixTz(gOffset, tz, sizeof(tz));
       }
     }
     if (!lat) { lat = CITIES[0].lat; lon = CITIES[0].lon; }
@@ -408,12 +396,16 @@ int WeatherActivity::silentRefresh() {
     lon = CITIES[city - 1].lon;
   }
 
-  configTzTime(tz, "pool.ntp.org", "time.google.com");
-  // Wait for NTP sync (up to 5 seconds)
-  for (int i = 0; i < 50; i++) {
-    time_t t = time(nullptr);
-    if (t > 1700000000) break;
-    delay(100);
+  // NTP sync with the configured timezone (skip in manual clock mode)
+  if (SETTINGS.clockMode == CrossPointSettings::CLOCK_NTP) {
+    const char* tz = getenv("TZ");
+    configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
+    // Wait for NTP sync (up to 5 seconds)
+    for (int i = 0; i < 50; i++) {
+      time_t t = time(nullptr);
+      if (t > 1700000000) break;
+      delay(100);
+    }
   }
 
   char url[256];
@@ -442,7 +434,6 @@ int WeatherActivity::silentRefresh() {
   out["code"]  = current["weather_code"] | 0;
   out["wind"]  = current["wind_speed_10m"] | 0.0f;
   out["city"]  = city;
-  out["tz"]    = tz;
   if (autoCity[0]) out["autoCity"] = autoCity;
   if (autoLat[0]) { out["autoLat"] = autoLat; out["autoLon"] = autoLon; }
 

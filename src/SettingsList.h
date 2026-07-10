@@ -42,6 +42,11 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                         {StrId::STR_CELSIUS, StrId::STR_FAHRENHEIT}, "temperatureUnit", StrId::STR_CAT_DISPLAY),
       SettingInfo::Enum(StrId::STR_CLOCK_MODE, &CrossPointSettings::clockMode,
                         {StrId::STR_CLOCK_NTP, StrId::STR_CLOCK_MANUAL}, "clockMode", StrId::STR_CAT_DISPLAY),
+      SettingInfo::Enum(StrId::STR_TIMEZONE, &CrossPointSettings::timezone,
+                        {StrId::STR_TZ_MADRID, StrId::STR_TZ_CANARIAS, StrId::STR_TZ_LONDRES, StrId::STR_TZ_UTC,
+                         StrId::STR_TZ_MEXICO, StrId::STR_TZ_BOGOTA_LIMA, StrId::STR_TZ_BUENOS_AIRES,
+                         StrId::STR_TZ_NUEVA_YORK},
+                        "timezone", StrId::STR_CAT_DISPLAY),
       // Beta: route custom SD-card font to UI text (filenames, menus) as well as reader.
       SettingInfo::DynamicToggle(
           StrId::STR_SYSTEM_WIDE_CUSTOM_FONT,

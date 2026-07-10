@@ -64,7 +64,8 @@ void ClockActivity::onEnter() {
   // system time via sntp_set_time_sync_notification_cb (registered in main.cpp).
   // Users who periodically use WiFi (Sync, Weather, OTA) get their RTC drift
   // corrected without a dedicated "sync time" button.
-  if (WiFi.status() == WL_CONNECTED && !esp_sntp_enabled()) {
+  if (SETTINGS.clockMode == CrossPointSettings::CLOCK_NTP && WiFi.status() == WL_CONNECTED &&
+      !esp_sntp_enabled()) {
     const char* tz = getenv("TZ");
     configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
   }

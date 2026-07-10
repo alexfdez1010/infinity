@@ -258,6 +258,24 @@ class CrossPointSettings {
   enum CLOCK_MODE { CLOCK_NTP = 0, CLOCK_MANUAL = 1, CLOCK_MODE_COUNT };
   uint8_t clockMode = CLOCK_NTP;
 
+  // Timezone: curated POSIX TZ list (DST rules included where the zone has them)
+  enum TIMEZONE {
+    TZ_MADRID = 0,        // CET/CEST (peninsula, Baleares; also Paris/Berlin/Rome)
+    TZ_CANARIAS = 1,      // WET/WEST
+    TZ_LONDRES = 2,       // GMT/BST (also Lisbon)
+    TZ_UTC = 3,
+    TZ_MEXICO = 4,        // UTC-6, no DST
+    TZ_BOGOTA_LIMA = 5,   // UTC-5, no DST
+    TZ_BUENOS_AIRES = 6,  // UTC-3, no DST
+    TZ_NUEVA_YORK = 7,    // EST/EDT
+    TIMEZONE_COUNT
+  };
+  uint8_t timezone = TZ_MADRID;
+  // POSIX TZ string for a TIMEZONE enum value (safe fallback to Madrid on bad input)
+  static const char* getTimezonePosix(uint8_t tz);
+  // setenv("TZ")+tzset() from the timezone setting — call after boot restore or a setting change
+  static void applyTimezone();
+
   static uint32_t getSleepRefreshMinutes(const uint8_t setting) {
     constexpr uint32_t intervals[] = {0, 1, 5, 10, 30, 60};
     return setting < SLEEP_REFRESH_INTERVAL_COUNT ? intervals[setting] : 0;

@@ -257,10 +257,11 @@ void WifiSelectionActivity::checkConnectionStatus() {
     connectedIP = ipStr;
     autoConnecting = false;
 
-    // Start NTP sync with the cached timezone (set by main.cpp on boot from
-    // weather_cache.json, or Europe/Madrid default).  configTzTime reads the TZ env var
-    // that was set at startup, so localtime_r() returns local time immediately.
-    if (!esp_sntp_enabled()) {
+    // Start NTP sync with the configured timezone (applied by main.cpp on boot from
+    // the timezone setting).  configTzTime reads the TZ env var that was set at
+    // startup, so localtime_r() returns local time immediately. Skipped in manual
+    // clock mode — NTP would override the user's hand-set time.
+    if (SETTINGS.clockMode == CrossPointSettings::CLOCK_NTP && !esp_sntp_enabled()) {
       const char* tz = getenv("TZ");
       configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
     }

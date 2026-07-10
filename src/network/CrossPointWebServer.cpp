@@ -1215,6 +1215,7 @@ void CrossPointWebServer::handlePostSettings() {
   }
 
   SETTINGS.saveToFile();
+  CrossPointSettings::applyTimezone();  // timezone may have changed — re-apply TZ env
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
   server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");

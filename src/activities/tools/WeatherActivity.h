@@ -73,7 +73,6 @@ class WeatherActivity final : public Activity {
   char detectedCityName[32] = "";
   char detectedLat[16] = "";
   char detectedLon[16] = "";
-  char detectedTz[32] = "CET-1CEST,M3.5.0,M10.5.0/3";  // POSIX TZ string from ip-api offset (default Europe/Madrid)
 
   int cityCursor = 0;      // Cursor in city list (0=Auto, 1..63=cities)
   int cityScrollTop = 0;   // First visible item in city list

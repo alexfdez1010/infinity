@@ -10,6 +10,7 @@
 #include <FontDecompressor.h>
 #include <FontManager.h>
 
+#include "CrossPointSettings.h"
 #include "Epub/Section.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
@@ -122,8 +123,8 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
-  // Sync time with NTP before making API requests
-  syncTimeWithNTP();
+  // Sync time with NTP before making API requests (skip in manual clock mode)
+  if (SETTINGS.clockMode == CrossPointSettings::CLOCK_NTP) syncTimeWithNTP();
 
   {
     RenderLock lock(*this);
