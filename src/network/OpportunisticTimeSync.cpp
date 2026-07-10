@@ -16,7 +16,6 @@ extern bool g_clockApproximate;
 extern uint32_t g_lastNtpSyncUnix;
 
 namespace {
-constexpr uint32_t STALE_AFTER_SECS = 12UL * 3600;  // resync at most twice a day
 constexpr int CONNECT_TIMEOUT_DS = 100;             // 10 s in 100 ms steps, per network
 constexpr int SYNC_TIMEOUT_DS = 150;                // 15 s in 100 ms steps
 constexpr int MAX_NETWORK_ATTEMPTS = 3;
@@ -97,13 +96,10 @@ void maybeStart() {
   if (SETTINGS.clockMode == CrossPointSettings::CLOCK_MANUAL) return;  // user manages time by hand
   if (WiFi.status() == WL_CONNECTED) return;
 
-  // Rate limit: skip when the last sync is recent. g_lastNtpSyncUnix lives in
-  // RTC memory — if it was lost (cold boot), 0 counts as stale and we just sync.
-  const uint32_t now = static_cast<uint32_t>(time(nullptr));
-  if (g_lastNtpSyncUnix != 0 && now >= g_lastNtpSyncUnix &&
-      now - g_lastNtpSyncUnix < STALE_AFTER_SECS) {
-    return;
-  }
+  // No epoch-based rate limit on purpose: it would measure staleness with the very
+  // clock we distrust (a clock hours behind reports the last sync as "recent" and
+  // skips the fix). g_clockApproximate already caps this at one successful sync per
+  // boot, and the 15-min retry in main loop only fires while still unsynced.
 
   WIFI_STORE.loadFromFile();
   if (WIFI_STORE.getCredentials().empty()) return;

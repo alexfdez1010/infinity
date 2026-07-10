@@ -766,9 +766,11 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     time(&now);
     struct tm timeinfo;
     localtime_r(&now, &timeinfo);
+    extern bool g_clockApproximate;
     char clockBuf[8];
     if (timeinfo.tm_year >= 125) {
-      snprintf(clockBuf, sizeof(clockBuf), "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+      snprintf(clockBuf, sizeof(clockBuf), "%s%02d:%02d", g_clockApproximate ? "~" : "",
+               timeinfo.tm_hour, timeinfo.tm_min);
     } else {
       snprintf(clockBuf, sizeof(clockBuf), "--:--");
     }

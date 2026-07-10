@@ -452,6 +452,14 @@ void setup() {
     }
 
     g_rtcSleepMagic = 0;  // consume — next boot treats as cold boot unless we sleep again
+
+    // No battery-backed RTC: whatever seeded the clock this boot (soft-reset
+    // carry-over, RTC/SD restore, build time), it is unverified until NTP
+    // confirms it. A flash/panic/USB reset can carry over a clock that is hours
+    // behind yet has a valid year — never trust it just because it parses.
+    // onNtpSyncComplete clears this when a sync lands.
+    g_clockApproximate = true;
+    LOG_DBG("MAIN", "Clock at boot: %lu (approximate until NTP)", (unsigned long)time(nullptr));
   }
 
   // Apply the configured timezone (settings-driven, defaults to Europe/Madrid CET/CEST).

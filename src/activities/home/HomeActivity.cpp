@@ -281,9 +281,10 @@ void HomeActivity::renderHeaderClock() {
   time(&now);
   struct tm timeinfo;
   localtime_r(&now, &timeinfo);
+  extern bool g_clockApproximate;
   char buf[8];
   if (timeinfo.tm_year >= 125)
-    snprintf(buf, sizeof(buf), "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+    snprintf(buf, sizeof(buf), "%s%02d:%02d", g_clockApproximate ? "~" : "", timeinfo.tm_hour, timeinfo.tm_min);
   else
     snprintf(buf, sizeof(buf), "--:--");
 

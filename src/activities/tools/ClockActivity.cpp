@@ -47,6 +47,10 @@ void ClockActivity::applyEditedTime() {
   tv.tv_sec = mktime(&editTime);
   tv.tv_usec = 0;
   settimeofday(&tv, nullptr);
+
+  // Hand-set time is authoritative — drop the "~" approximate indicator
+  extern bool g_clockApproximate;
+  g_clockApproximate = false;
 }
 
 void ClockActivity::onEnter() {
