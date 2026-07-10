@@ -364,90 +364,25 @@ int WeatherActivity::silentRefresh() {
     delay(500);  // Allow DNS resolver to initialize after WiFi connect
   }
 
-  uint8_t city = SETTINGS.weatherCity;
-  if (city > CITY_COUNT) city = 0;
-
-  const char* lat = nullptr;
-  const char* lon = nullptr;
-  char autoLat[16] = "";
-  char autoLon[16] = "";
-  char autoCity[32] = "";
-
-  if (city == 0) {
-    std::string geoResponse;
-    if (HttpDownloader::fetchUrl("http://ip-api.com/json/?fields=lat,lon,city", geoResponse)) {
-      JsonDocument geoDoc;
-      if (!deserializeJson(geoDoc, geoResponse)) {
-        float gLat = geoDoc["lat"] | 0.0f;
-        float gLon = geoDoc["lon"] | 0.0f;
-        const char* gCity = geoDoc["city"] | "";
-        if (gLat != 0.0f || gLon != 0.0f) {
-          snprintf(autoLat, sizeof(autoLat), "%.4f", gLat);
-          snprintf(autoLon, sizeof(autoLon), "%.4f", gLon);
-          strncpy(autoCity, gCity, sizeof(autoCity) - 1);
-          lat = autoLat;
-          lon = autoLon;
-        }
-      }
-    }
-    if (!lat) { lat = CITIES[0].lat; lon = CITIES[0].lon; }
-  } else {
-    lat = CITIES[city - 1].lat;
-    lon = CITIES[city - 1].lon;
-  }
+  // Weather fetch removed — the weather feature is no longer used. This "sync"
+  // now only refreshes the clock over NTP. WiFi is already connected at this
+  // point (above); bring it up, sync time, tear back down.
 
   // NTP sync with the configured timezone (skip in manual clock mode)
   if (SETTINGS.clockMode == CrossPointSettings::CLOCK_NTP) {
     const char* tz = getenv("TZ");
     configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
-    // Wait for NTP sync (up to 5 seconds)
-    for (int i = 0; i < 50; i++) {
-      time_t t = time(nullptr);
-      if (t > 1700000000) break;
+    // Wait for NTP sync (up to 8 seconds)
+    bool got = false;
+    for (int i = 0; i < 80; i++) {
+      if (time(nullptr) > 1700000000) { got = true; break; }
       delay(100);
     }
-  }
-
-  char url[256];
-  snprintf(url, sizeof(url),
-           "http://api.open-meteo.com/v1/forecast?"
-           "latitude=%s&longitude=%s"
-           "&current=temperature_2m,relative_humidity_2m,"
-           "apparent_temperature,weather_code,wind_speed_10m",
-           lat, lon);
-
-  std::string response;
-  if (!HttpDownloader::fetchUrl(std::string(url), response)) {
     WiFi.disconnect(false); delay(100); WiFi.mode(WIFI_OFF);
-    return 4;
+    return got ? 0 : 2;  // 0=ok, 2=timeout
   }
 
-  JsonDocument doc;
-  if (deserializeJson(doc, response)) { WiFi.disconnect(false); WiFi.mode(WIFI_OFF); return 5; }
-  JsonObject current = doc["current"];
-  if (current.isNull()) { WiFi.disconnect(false); WiFi.mode(WIFI_OFF); return 5; }
-
-  JsonDocument out;
-  out["temp"]  = current["temperature_2m"] | 0.0f;
-  out["feels"] = current["apparent_temperature"] | 0.0f;
-  out["hum"]   = current["relative_humidity_2m"] | 0;
-  out["code"]  = current["weather_code"] | 0;
-  out["wind"]  = current["wind_speed_10m"] | 0.0f;
-  out["city"]  = city;
-  if (autoCity[0]) out["autoCity"] = autoCity;
-  if (autoLat[0]) { out["autoLat"] = autoLat; out["autoLon"] = autoLon; }
-
-  time_t now; time(&now);
-  struct tm ti; localtime_r(&now, &ti);
-  char timeBuf[8];
-  snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", ti.tm_hour, ti.tm_min);
-  out["time"] = timeBuf;
-
-  String json;
-  serializeJson(out, json);
-  Storage.ensureDirectoryExists("/.crosspoint");
-  Storage.writeFile("/.crosspoint/weather_cache.json", json);
-
+  // Manual clock mode: nothing to sync.
   WiFi.disconnect(false); delay(100); WiFi.mode(WIFI_OFF);
   return 0;
 }
