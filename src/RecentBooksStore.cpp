@@ -1,5 +1,8 @@
 #include "RecentBooksStore.h"
 
+#include "BookStats.h"
+#include "ReadingStats.h"
+
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
@@ -78,6 +81,13 @@ void RecentBooksStore::markAsRead(const std::string& path, const std::string& ti
       recentBooks.push_back(nb);
   }
   saveToFile();
+
+  // Keep the reading statistics in sync so per-book progress and the global
+  // "books finished" counter reflect the manual mark, not just the home card.
+  if (BOOK_STATS.markFinished(path.c_str(), title.c_str())) {
+    READ_STATS.booksFinished++;
+    READ_STATS.saveToFile();
+  }
 }
 
 bool RecentBooksStore::saveToFile() const {

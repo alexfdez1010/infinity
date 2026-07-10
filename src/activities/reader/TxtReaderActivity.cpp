@@ -330,6 +330,7 @@ void TxtReaderActivity::render(RenderLock&&) {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_FILE), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
+    clearBootCrashGuard();  // responsive screen reached — reader didn't crash on load
     return;
   }
 
@@ -349,6 +350,12 @@ void TxtReaderActivity::render(RenderLock&&) {
 
   // Save progress
   saveProgress();
+
+  // A full render completed — the reader is stable. Clear the boot crash guard
+  // (set to 1 before goToReader on wake). Leaving it until onExit — which never
+  // runs on deep sleep — stranded it, so a wake-resume then re-sleep booted to
+  // Home instead of resuming the book. See EpubReaderActivity for the rationale.
+  clearBootCrashGuard();
 }
 
 void TxtReaderActivity::renderPage() {

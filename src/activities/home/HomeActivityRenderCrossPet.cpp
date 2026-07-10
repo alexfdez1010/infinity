@@ -483,11 +483,16 @@ void HomeActivity::markSelectedBookRead() {
 
   RecentBook& b = recentBooks[bookIdx];
   b.progressPercent = 100;
-  RECENT_BOOKS.updateBookProgress(b.path, 100);
+  // markAsRead persists the recent-list percent AND updates per-book stats +
+  // the global finished counter, so the mark survives a reopen/stat refresh.
+  RECENT_BOOKS.markAsRead(b.path, b.title, b.author, b.coverBmpPath);
 
-  // Brief confirmation toast, then rebuild the card so it shows 100%.
-  GUI.drawPopup(renderer, tr(STR_MARKED_AS_READ));
+  // Repaint the card at 100% FIRST (the old code drew the toast, then let the
+  // cached-buffer fast path restore the stale 70% frame on top of it — so the
+  // book appeared to stay at 70%). Then float the toast over the fresh frame.
+  coverRendered = false;
   requestUpdateAndWait();
+  GUI.drawPopup(renderer, tr(STR_MARKED_AS_READ));
   delay(900);
   coverRendered = false;
   requestUpdate();

@@ -22,6 +22,11 @@ class BookStats {
   // Update stats for a specific book after a reading session
   void updateBook(const char* path, const char* title, uint32_t sessionSeconds, uint8_t progress);
 
+  // Force a book to 100% (user "mark as read") without adding session time or
+  // counting a session. Creates the entry if missing. Returns true if the book
+  // was not already finished (so callers can bump the global finished counter).
+  bool markFinished(const char* path, const char* title);
+
   // Get stats for a specific book (nullptr if not found)
   const BookEntry* getBook(const char* path) const;
 

@@ -328,11 +328,13 @@ void RecentBooksActivity::markSelectedBookRead() {
   const std::string& path = bookPaths[selectorIndex];
   RECENT_BOOKS.markAsRead(path, bookTitle(path), "", "");
 
-  // Brief confirmation, then drop the page cache so the progress bar repaints.
-  GUI.drawPopup(renderer, tr(STR_MARKED_AS_READ));
-  requestUpdateAndWait();
-  delay(900);
+  // Drop the cached page buffer FIRST so the repaint reflects the new 100% bar,
+  // then float the toast over that fresh frame. (Repainting after the toast let
+  // the stale cached buffer wipe it and re-show the old progress.)
   freePageBuffer();
+  requestUpdateAndWait();
+  GUI.drawPopup(renderer, tr(STR_MARKED_AS_READ));
+  delay(900);
   requestUpdate();
 }
 

@@ -149,11 +149,17 @@ void XtcReaderActivity::render(RenderLock&&) {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
     renderer.displayBuffer();
+    clearBootCrashGuard();  // responsive screen reached — reader didn't crash on load
     return;
   }
 
   renderPage();
   saveProgress();
+
+  // Stable render completed — clear the boot crash guard now, not only in
+  // onExit() (which never runs on deep sleep). Otherwise a wake-resume then
+  // re-sleep strands the guard and forces the next wake to Home.
+  clearBootCrashGuard();
 }
 
 namespace {

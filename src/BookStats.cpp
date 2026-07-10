@@ -52,6 +52,39 @@ void BookStats::updateBook(const char* path, const char* title, uint32_t session
   saveToFile();
 }
 
+bool BookStats::markFinished(const char* path, const char* title) {
+  if (!path || path[0] == '\0') return false;
+
+  time_t now;
+  time(&now);
+
+  auto it = books.find(path);
+  if (it == books.end()) {
+    if ((int)books.size() >= MAX_BOOKS) evictOldest();
+    BookEntry entry = {};
+    if (title && title[0] != '\0') {
+      strncpy(entry.title, title, sizeof(entry.title) - 1);
+      entry.title[sizeof(entry.title) - 1] = '\0';
+    }
+    entry.progress = 100;
+    entry.lastReadTimestamp = static_cast<uint32_t>(now);
+    books[path] = entry;
+    saveToFile();
+    return true;
+  }
+
+  BookEntry& entry = it->second;
+  const bool wasFinished = entry.progress >= 100;
+  if (title && title[0] != '\0') {
+    strncpy(entry.title, title, sizeof(entry.title) - 1);
+    entry.title[sizeof(entry.title) - 1] = '\0';
+  }
+  entry.progress = 100;
+  entry.lastReadTimestamp = static_cast<uint32_t>(now);
+  saveToFile();
+  return !wasFinished;
+}
+
 const BookStats::BookEntry* BookStats::getBook(const char* path) const {
   if (!path) return nullptr;
   auto it = books.find(path);

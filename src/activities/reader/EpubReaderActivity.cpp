@@ -997,6 +997,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
+    clearBootCrashGuard();  // responsive screen reached — reader didn't crash on load
     return;
   }
 
@@ -1006,6 +1007,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
+    clearBootCrashGuard();  // responsive screen reached — reader didn't crash on load
     return;
   }
 
@@ -1026,6 +1028,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         renderer.displayBuffer();
         automaticPageTurnActive = false;
         pageLoadFailCount = 0;
+        clearBootCrashGuard();  // responsive (error) screen reached — not a crash loop
         return;
       }
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
@@ -1051,15 +1054,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
 
   // A full render completed without a watchdog reset — the reader is stable.
-  // Clear the boot crash guard now. It is set to 1 before goToReader() on wake
-  // (main.cpp) and, if left until onExit(), a later hang/reset mid-reading would
-  // strand it and force the next boot to Home instead of resuming the book.
-  // Doing it here (after page load + next-chapter prefetch) bounds the guard to a
-  // genuinely stable render. Guarded write so page turns don't hit the SD.
-  if (APP_STATE.readerActivityLoadCount != 0) {
-    APP_STATE.readerActivityLoadCount = 0;
-    APP_STATE.saveToFile();
-  }
+  // Clear the boot crash guard now (bounded to a genuinely stable render, after
+  // page load + next-chapter prefetch), not only in onExit() which never runs on
+  // deep sleep. See clearBootCrashGuard() for the full rationale.
+  clearBootCrashGuard();
 
   if (pendingScreenshot) {
     pendingScreenshot = false;

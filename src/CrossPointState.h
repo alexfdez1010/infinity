@@ -36,3 +36,16 @@ class CrossPointState {
 
 // Helper macro to access settings
 #define APP_STATE CrossPointState::getInstance()
+
+// Clear the boot crash guard once a reader has rendered a stable, responsive
+// frame. The guard (readerActivityLoadCount) is bumped before goToReader() on
+// wake so a reader that crashes during load boots to Home next time instead of
+// re-crashing. It must be cleared after a genuine render — NOT only in onExit(),
+// which never runs on deep sleep, or a wake-resume then re-sleep strands the
+// guard and forces the next wake to Home. Guarded write avoids per-page SD hits.
+inline void clearBootCrashGuard() {
+  if (APP_STATE.readerActivityLoadCount != 0) {
+    APP_STATE.readerActivityLoadCount = 0;
+    APP_STATE.saveToFile();
+  }
+}
