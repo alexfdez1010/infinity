@@ -813,6 +813,7 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
           currentSpineIndex < epub->getSpineItemsCount()) {
         lastCompletedSpineIndex = currentSpineIndex;
         chapterCompleteCount++;
+        GAMIFY.onChapterFinished();  // daily chapter quests
         if (chapterCompleteCount % 3 == 0) {
           showChapterPopup = true;
           chapterPopupTime = millis();

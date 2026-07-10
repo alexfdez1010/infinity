@@ -21,6 +21,7 @@
 #include "CrossPointState.h"
 #include "BookStats.h"
 #include "ReadingStats.h"
+#include "gamification/Gamification.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -932,6 +933,33 @@ void SleepActivity::renderReadingStatsSleepScreen() const {
   int y = 12;
   renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_READING_STATS), true, EpdFontFamily::BOLD);
   y += lhUi12 + 10;
+
+  // ── Streak status banner ──────────────────────────────────────────────────
+  // Loss-aversion nudge: surface the live streak and whether today's read is
+  // still pending, so the always-on frame acts as a habit trigger.
+  if (GAMIFY.streak > 0) {
+    const bool readToday = GAMIFY.liveTodaySeconds() > 0;
+    char streakBuf[24];
+    snprintf(streakBuf, sizeof(streakBuf), tr(STR_STREAK_DAYS_FMT), (unsigned)GAMIFY.streak);
+    const char* stateLabel = readToday ? tr(STR_STREAK_SAFE_TODAY) : tr(STR_STREAK_AT_RISK);
+
+    const int bannerH = lhUi10 + 8;
+    renderer.drawText(UI_10_FONT_ID, MARGIN + CARD_PAD, y + 4, streakBuf, true, EpdFontFamily::BOLD);
+
+    // State pill — right aligned; at-risk drawn inverted (filled) to draw the eye.
+    const int stateW      = renderer.getTextWidth(SMALL_FONT_ID, stateLabel);
+    constexpr int pillPad = 8;
+    const int pillW       = stateW + pillPad * 2;
+    const int pillX       = pageWidth - MARGIN - CARD_PAD - pillW;
+    const int textY       = y + (bannerH - lhSmall) / 2;
+    if (readToday) {
+      renderer.drawText(SMALL_FONT_ID, pillX + pillPad, textY, stateLabel, true);
+    } else {
+      renderer.fillRect(pillX, y, pillW, bannerH, true);
+      renderer.drawText(SMALL_FONT_ID, pillX + pillPad, textY, stateLabel, false);
+    }
+    y += bannerH + 8;
+  }
 
   // ── TODAY card ────────────────────────────────────────────────────────────
   char todayBuf[32];

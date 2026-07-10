@@ -9,10 +9,10 @@
 #include "gamification/Gamification.h"
 #include "util/StringUtils.h"
 
-// Achievement pages 1/2 and 2/2 each show up to 8 badges (indices 0..7 and 8..15).
-// If AchievementId grows past 16, badges beyond index 15 would silently never render.
-static_assert(static_cast<uint8_t>(AchievementId::COUNT) <= 16,
-              "ReadingGoalsActivity needs another achievements page beyond 16 badges");
+// Achievement pages 1/3..3/3 each show up to 8 badges (indices 0..7, 8..15, 16..23).
+// If AchievementId grows past 24, badges beyond index 23 would silently never render.
+static_assert(static_cast<uint8_t>(AchievementId::COUNT) <= 24,
+              "ReadingGoalsActivity needs another achievements page beyond 24 badges");
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -68,7 +68,7 @@ void ReadingGoalsActivity::render(RenderLock&&) {
   if (page == 0) {
     renderGoalsPage(y);
   } else {
-    renderAchievementsPage(y, page == 1 ? 0 : 8);
+    renderAchievementsPage(y, static_cast<uint8_t>((page - 1) * 8));
   }
 
   // Button hints
@@ -158,8 +158,51 @@ int ReadingGoalsActivity::renderGoalsPage(int y) {
   renderer.fillRect(sepMargin, y, sepW, 1);
   y += 14;
 
+  // --- DAILY QUEST: rotating micro-challenge ---
+  const QuestId quest = GAMIFY.todaysQuest();
+  if (quest != QuestId::COUNT) {
+    renderer.drawText(SMALL_FONT_ID, MARGIN, y, tr(STR_QUEST_SECTION));
+    if (GAMIFY.questsCompletedTotal > 0) {
+      char totalBuf[32];
+      snprintf(totalBuf, sizeof(totalBuf), tr(STR_QUEST_TOTAL_FMT),
+               (unsigned)GAMIFY.questsCompletedTotal);
+      const int tw = renderer.getTextWidth(SMALL_FONT_ID, totalBuf);
+      renderer.drawText(SMALL_FONT_ID, pageWidth - MARGIN - tw, y, totalBuf);
+    }
+    y += lhSmall + 4;
+
+    // Done-state indicator square + quest text
+    constexpr int BADGE = 14;
+    const int badgeY = y + (lhUi10 - BADGE) / 2;
+    if (GAMIFY.questDoneToday) {
+      renderer.fillRect(MARGIN, badgeY, BADGE, BADGE);
+    } else {
+      renderer.drawRect(MARGIN, badgeY, BADGE, BADGE);
+    }
+    const int questX = MARGIN + BADGE + 10;
+    renderer.drawText(UI_10_FONT_ID, questX, y, I18N.get(GamificationManager::questDesc(quest)),
+                      true, GAMIFY.questDoneToday ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    if (GAMIFY.questDoneToday) {
+      const int qw = renderer.getTextWidth(UI_10_FONT_ID,
+                                           I18N.get(GamificationManager::questDesc(quest)),
+                                           EpdFontFamily::BOLD);
+      renderer.drawText(SMALL_FONT_ID, questX + qw + 10, y + (lhUi10 - lhSmall) / 2,
+                        tr(STR_QUEST_DONE));
+    }
+    y += lhUi10 + 12;
+    renderer.fillRect(sepMargin, y, sepW, 1);
+    y += 14;
+  }
+
   // --- LAST 7 DAYS bar chart ---
   renderer.drawText(SMALL_FONT_ID, MARGIN, y, tr(STR_GOAL_LAST_7_DAYS));
+  {
+    // Weekly goal-days tally, right-aligned on the section label line
+    char weekBuf[32];
+    snprintf(weekBuf, sizeof(weekBuf), tr(STR_WEEK_GOALS_FMT), (unsigned)GAMIFY.weekGoalDays());
+    const int ww = renderer.getTextWidth(SMALL_FONT_ID, weekBuf);
+    renderer.drawText(SMALL_FONT_ID, pageWidth - MARGIN - ww, y, weekBuf);
+  }
   y += lhSmall + 6;
   {
     constexpr int CHART_H = 90;

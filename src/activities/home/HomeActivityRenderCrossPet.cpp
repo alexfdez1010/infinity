@@ -11,6 +11,7 @@
 
 #include "BookStats.h"
 #include "ReadingStats.h"
+#include "gamification/Gamification.h"
 #include "CrossPetSettings.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -266,7 +267,7 @@ void HomeActivity::renderReadingStatsBar() {
   const int todayMin = todaySec / 60;
   const int totalHr = totalSec / 3600;
   const int totalMin = (totalSec % 3600) / 60;
-  const int streak = READ_STATS.currentStreak;
+  const int streak = GAMIFY.streak;  // freeze-token-aware reading-day streak
 
   // Labels (top row, centered in each column)
   const int labelY = panelY + 12;
@@ -292,6 +293,14 @@ void HomeActivity::renderReadingStatsBar() {
     int vw = renderer.getTextWidth(SMALL_FONT_ID, values[i]);
     int cx = panelX + colW * i + (colW - vw) / 2;
     renderer.drawText(SMALL_FONT_ID, cx, valueY, values[i], true);
+  }
+
+  // Loss-aversion nudge: warn when a streak is live but today's read is still pending.
+  if (streak > 0 && GAMIFY.liveTodaySeconds() == 0) {
+    const char* hint = tr(STR_STREAK_AT_RISK);
+    const int hintW = renderer.getTextWidth(SMALL_FONT_ID, hint);
+    const int hintY = valueY + smallH + 4;
+    renderer.drawText(SMALL_FONT_ID, panelX + (panelW - hintW) / 2, hintY, hint, true);
   }
 }
 

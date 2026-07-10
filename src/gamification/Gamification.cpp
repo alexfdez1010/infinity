@@ -39,7 +39,22 @@ const AchievementDef ACHIEVEMENTS[static_cast<uint8_t>(AchievementId::COUNT)] = 
     {StrId::STR_ACH_GOAL_WEEK, StrId::STR_ACH_GOAL_WEEK_DESC},
     {StrId::STR_ACH_GOAL_30, StrId::STR_ACH_GOAL_30_DESC},
     {StrId::STR_ACH_SESSIONS_100, StrId::STR_ACH_SESSIONS_100_DESC},
+    {StrId::STR_ACH_BOOKS_50, StrId::STR_ACH_BOOKS_50_DESC},
+    {StrId::STR_ACH_STREAK_365, StrId::STR_ACH_STREAK_365_DESC},
+    {StrId::STR_ACH_GOAL_100, StrId::STR_ACH_GOAL_100_DESC},
+    {StrId::STR_ACH_EARLY_BIRD, StrId::STR_ACH_EARLY_BIRD_DESC},
+    {StrId::STR_ACH_NIGHT_OWL, StrId::STR_ACH_NIGHT_OWL_DESC},
+    {StrId::STR_ACH_QUESTS_25, StrId::STR_ACH_QUESTS_25_DESC},
 };
+
+// Current local hour (0-23), or -1 when the wall clock is not valid yet
+int currentHour() {
+  const time_t now = time(nullptr);
+  if (now < MIN_VALID_TIME) return -1;
+  struct tm timeinfo = {};
+  localtime_r(&now, &timeinfo);
+  return timeinfo.tm_hour;
+}
 }  // namespace
 
 const AchievementDef& achievementDef(uint8_t idx) { return ACHIEVEMENTS[idx]; }
@@ -140,8 +155,72 @@ void GamificationManager::rollDay() {
   }
 
   goalCelebrated = false;
+  nudgeGiven = false;
+  questDoneToday = false;
+  todaySessions = 0;
+  chaptersToday = 0;
   lastYear = curYear;
   lastDayOfYear = curDay;
+}
+
+QuestId GamificationManager::todaysQuest() const {
+  const time_t now = time(nullptr);
+  if (now < MIN_VALID_TIME) return QuestId::COUNT;
+  struct tm timeinfo = {};
+  localtime_r(&now, &timeinfo);
+  // Deterministic per calendar day, avoids repeating yesterday's quest on most days
+  const uint32_t seed = static_cast<uint32_t>(timeinfo.tm_year) * 366u +
+                        static_cast<uint32_t>(timeinfo.tm_yday);
+  return static_cast<QuestId>((seed * 2654435761u >> 8) % static_cast<uint8_t>(QuestId::COUNT));
+}
+
+StrId GamificationManager::questDesc(QuestId id) {
+  switch (id) {
+    case QuestId::FocusSession: return StrId::STR_QUEST_FOCUS;
+    case QuestId::Overachieve:  return StrId::STR_QUEST_OVERACHIEVE;
+    case QuestId::TwoSessions:  return StrId::STR_QUEST_TWO_SESSIONS;
+    case QuestId::Chapter:      return StrId::STR_QUEST_CHAPTER;
+    default:                    return StrId::STR_QUEST_CHAPTERS_2;
+  }
+}
+
+uint8_t GamificationManager::weekGoalDays() const {
+  uint8_t days = 0;
+  for (int i = 0; i < 7; i++) {
+    if (weekMinutes[i] >= dailyGoalMinutes) days++;
+  }
+  // Ring slot [0] only updates at session end; count a live goal met today too
+  if (weekMinutes[0] < dailyGoalMinutes && goalMetToday()) days++;
+  return days;
+}
+
+bool GamificationManager::questConditionMet() const {
+  switch (todaysQuest()) {
+    case QuestId::FocusSession:
+      return READ_STATS.currentSessionSeconds() >= 20UL * 60;
+    case QuestId::Overachieve:
+      return liveTodaySeconds() >= dailyGoalMinutes * 90UL;  // 60 * 1.5
+    case QuestId::TwoSessions:
+      return todaySessions >= 2;
+    case QuestId::Chapter:
+      return chaptersToday >= 1;
+    case QuestId::Chapters2:
+      return chaptersToday >= 2;
+    default:
+      return false;  // no valid clock, no quest
+  }
+}
+
+void GamificationManager::rollSurpriseReward() {
+  if (freezeTokens >= MAX_FREEZE_TOKENS) return;
+  // Deterministic but unpredictable-feeling: hash of date + lifetime session count
+  const uint32_t h = (static_cast<uint32_t>(lastYear) * 366u + static_cast<uint32_t>(lastDayOfYear)) *
+                         2654435761u ^
+                     READ_STATS.totalSessions * 40503u;
+  if ((h >> 4) % 3 == 0) {
+    freezeTokens++;
+    surprisePending = true;
+  }
 }
 
 AchievementId GamificationManager::evaluateAchievements() {
@@ -151,6 +230,8 @@ AchievementId GamificationManager::evaluateAchievements() {
   const uint16_t effStreak = streak > READ_STATS.currentStreak ? streak : READ_STATS.currentStreak;
   // Goal streak including today if already met
   const uint16_t liveGoalStreak = goalStreak + (goalCelebrated ? 1 : 0);
+  const uint16_t liveGoalDays = goalDaysTotal + (goalCelebrated ? 1 : 0);
+  const int hour = currentHour();
 
   const bool met[static_cast<uint8_t>(AchievementId::COUNT)] = {
       READ_STATS.booksFinished >= 1,
@@ -166,8 +247,16 @@ AchievementId GamificationManager::evaluateAchievements() {
       sessionSecs >= 3600 || bestSessionSeconds >= 3600,
       todaySecs >= 3UL * 3600 || bestDaySeconds >= 3UL * 3600,
       liveGoalStreak >= 7,
-      goalDaysTotal + (goalCelebrated ? 1 : 0) >= 30,
+      liveGoalDays >= 30,
       READ_STATS.totalSessions >= 100,
+      READ_STATS.booksFinished >= 50,
+      effStreak >= 365,
+      liveGoalDays >= 100,
+      // Momentary conditions: pollReader runs on every page turn, so the
+      // qualifying moment is observed while it is true
+      hour >= 0 && hour < 9 && goalMetToday(),
+      (hour >= 23 || (hour >= 0 && hour < 4)) && sessionSecs > 0,
+      questsCompletedTotal >= 25,
   };
 
   AchievementId firstNew = AchievementId::COUNT;
@@ -185,13 +274,45 @@ AchievementId GamificationManager::evaluateAchievements() {
 bool GamificationManager::pollReader(char* toast, size_t toastLen) {
   if (!toast || toastLen == 0) return false;
 
+  // Queued surprise reward from an earlier goal/quest completion
+  if (surprisePending) {
+    surprisePending = false;
+    saveToFile();
+    snprintf(toast, toastLen, "%s", tr(STR_SURPRISE_TOAST));
+    return true;
+  }
+
   // Daily goal crossed mid-session: celebrate once per day
   if (!goalCelebrated && dailyGoalMinutes > 0 && goalMetToday()) {
     goalCelebrated = true;
+    rollSurpriseReward();    // variable-ratio bonus, toasted on the next poll
     evaluateAchievements();  // goal-based badges may unlock at the same moment
     saveToFile();
     snprintf(toast, toastLen, "%s", tr(STR_GOAL_MET_TOAST));
     return true;
+  }
+
+  // Daily quest completed mid-session
+  if (!questDoneToday && questConditionMet()) {
+    questDoneToday = true;
+    questsCompletedTotal++;
+    rollSurpriseReward();
+    evaluateAchievements();
+    saveToFile();
+    snprintf(toast, toastLen, "%s", tr(STR_QUEST_DONE_TOAST));
+    return true;
+  }
+
+  // Goal-gradient nudge: within the last 5 minutes of the goal (and past halfway)
+  if (!goalCelebrated && !nudgeGiven && dailyGoalMinutes > 0) {
+    const uint32_t goalSecs = dailyGoalMinutes * 60UL;
+    const uint32_t todaySecs = liveTodaySeconds();
+    if (todaySecs * 2 >= goalSecs && todaySecs < goalSecs && goalSecs - todaySecs <= 5UL * 60) {
+      nudgeGiven = true;
+      const unsigned minsLeft = static_cast<unsigned>((goalSecs - todaySecs + 59) / 60);
+      snprintf(toast, toastLen, tr(STR_GOAL_NUDGE_FMT), minsLeft);
+      return true;
+    }
   }
 
   const AchievementId newUnlock = evaluateAchievements();
@@ -211,8 +332,9 @@ void GamificationManager::onSessionEnd() {
   weekMinutes[0] = static_cast<uint16_t>(READ_STATS.todayReadSeconds / 60);
 
   // Personal records via total-seconds delta (survives missed polls)
+  uint32_t sessionSecs = 0;
   if (READ_STATS.totalReadSeconds >= lastKnownTotalSeconds) {
-    const uint32_t sessionSecs = READ_STATS.totalReadSeconds - lastKnownTotalSeconds;
+    sessionSecs = READ_STATS.totalReadSeconds - lastKnownTotalSeconds;
     if (sessionSecs > bestSessionSeconds && sessionSecs < 86400) bestSessionSeconds = sessionSecs;
   }
   lastKnownTotalSeconds = READ_STATS.totalReadSeconds;
@@ -222,6 +344,19 @@ void GamificationManager::onSessionEnd() {
   if (!goalCelebrated && dailyGoalMinutes > 0 &&
       READ_STATS.todayReadSeconds >= dailyGoalMinutes * 60UL) {
     goalCelebrated = true;
+  }
+
+  // Quest fallback: conditions that hold at session end but were missed by polls
+  // (FocusSession checked against the closed session's length, since the live
+  // session counter is already 0 here)
+  if (!questDoneToday) {
+    const bool focusMet = todaysQuest() == QuestId::FocusSession && sessionSecs >= 20UL * 60;
+    if (focusMet || questConditionMet()) {
+      questDoneToday = true;
+      questsCompletedTotal++;
+      rollSurpriseReward();
+      surprisePending = false;  // no reader to toast it; token still granted
+    }
   }
 
   evaluateAchievements();
@@ -244,6 +379,10 @@ bool GamificationManager::saveToFile() const {
   doc["lastDayOfYear"] = lastDayOfYear;
   doc["goalCelebrated"] = goalCelebrated;
   doc["lastKnownTotalSeconds"] = lastKnownTotalSeconds;
+  doc["questsCompletedTotal"] = questsCompletedTotal;
+  doc["questDoneToday"] = questDoneToday;
+  doc["todaySessions"] = todaySessions;
+  doc["chaptersToday"] = chaptersToday;
   JsonArray week = doc["weekMinutes"].to<JsonArray>();
   for (int i = 0; i < 7; i++) week.add(weekMinutes[i]);
 
@@ -286,6 +425,10 @@ bool GamificationManager::loadFromFile() {
   lastDayOfYear = doc["lastDayOfYear"] | (int16_t)-1;
   goalCelebrated = doc["goalCelebrated"] | false;
   lastKnownTotalSeconds = doc["lastKnownTotalSeconds"] | READ_STATS.totalReadSeconds;
+  questsCompletedTotal = doc["questsCompletedTotal"] | (uint16_t)0;
+  questDoneToday = doc["questDoneToday"] | false;
+  todaySessions = doc["todaySessions"] | (uint8_t)0;
+  chaptersToday = doc["chaptersToday"] | (uint8_t)0;
   JsonArray week = doc["weekMinutes"];
   for (int i = 0; i < 7 && i < static_cast<int>(week.size()); i++) {
     weekMinutes[i] = week[i] | (uint16_t)0;

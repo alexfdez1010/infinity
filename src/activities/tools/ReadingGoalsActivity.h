@@ -14,7 +14,7 @@ class ReadingGoalsActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  static constexpr int PAGE_COUNT = 3;  // goals, achievements 1/2, achievements 2/2
+  static constexpr int PAGE_COUNT = 4;  // goals, achievements 1/3, 2/3, 3/3
   int page = 0;
 
   int renderGoalsPage(int y);
