@@ -22,4 +22,9 @@ void maybeStart();
 // WiFi state. Safe to call at any time, including when no task is running.
 void claimForeground();
 
+// Abort an in-flight sync AND release the radio (WiFi off, heap freed). Called
+// when a book is opened so an ongoing sync never competes with the reader for
+// heap/CPU on the single-core C3. No-op when no task is running.
+void cancel();
+
 }  // namespace OpportunisticTimeSync

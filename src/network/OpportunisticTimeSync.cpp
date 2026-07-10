@@ -22,12 +22,19 @@ constexpr int MAX_NETWORK_ATTEMPTS = 3;
 
 std::atomic<bool> taskActive{false};
 std::atomic<bool> foregroundClaimed{false};
+// cancel() sets this when a book is opened mid-sync: like foregroundClaimed it
+// stops the task ASAP, but unlike it the task still tears the radio down (no
+// foreground consumer is waiting for WiFi — we just want the heap/CPU back).
+std::atomic<bool> cancelRequested{false};
+
+// True when the sync should stop early for any reason.
+inline bool aborted() { return foregroundClaimed || cancelRequested; }
 
 // Connect to `cred` and wait for association. Returns true when connected.
 bool connectTo(const WifiCredential& cred) {
   LOG_DBG("TSYNC", "Background NTP sync: connecting to %s", cred.ssid.c_str());
   WiFi.begin(cred.ssid.c_str(), cred.password.c_str());
-  for (int i = 0; i < CONNECT_TIMEOUT_DS && !foregroundClaimed; i++) {
+  for (int i = 0; i < CONNECT_TIMEOUT_DS && !aborted(); i++) {
     if (WiFi.status() == WL_CONNECTED) return true;
     vTaskDelay(pdMS_TO_TICKS(100));
   }
@@ -43,9 +50,9 @@ void syncTask(void*) {
   // Scan and try saved networks strongest-first (scan results come RSSI-sorted).
   // Falls back to a blind connect to the last-used network below — hidden SSIDs
   // don't show up in a scan.
-  const int found = foregroundClaimed ? 0 : WiFi.scanNetworks();
+  const int found = aborted() ? 0 : WiFi.scanNetworks();
   int attempts = 0;
-  for (int i = 0; i < found && !connected && !foregroundClaimed && attempts < MAX_NETWORK_ATTEMPTS; i++) {
+  for (int i = 0; i < found && !connected && !aborted() && attempts < MAX_NETWORK_ATTEMPTS; i++) {
     const auto* cred = WIFI_STORE.findCredential(WiFi.SSID(i).c_str());
     if (!cred) continue;
     attempts++;
@@ -54,18 +61,18 @@ void syncTask(void*) {
   }
   WiFi.scanDelete();
 
-  if (!connected && attempts == 0 && !foregroundClaimed) {
+  if (!connected && attempts == 0 && !aborted()) {
     const auto& ssid = WIFI_STORE.getLastConnectedSsid();
     const auto* cred = ssid.empty() ? nullptr : WIFI_STORE.findCredential(ssid);
     if (cred) connected = connectTo(*cred);
   }
 
-  if (connected && !foregroundClaimed) {
+  if (connected && !aborted()) {
     // configTzTime starts SNTP; onNtpSyncComplete (main.cpp) clears
     // g_clockApproximate and stamps g_lastNtpSyncUnix when the reply lands
     const char* tz = getenv("TZ");
     configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
-    for (int i = 0; i < SYNC_TIMEOUT_DS && !foregroundClaimed; i++) {
+    for (int i = 0; i < SYNC_TIMEOUT_DS && !aborted(); i++) {
       if (!g_clockApproximate) {
         synced = true;
         break;
@@ -74,7 +81,9 @@ void syncTask(void*) {
     }
   }
 
-  // Tear the radio down only if no foreground activity took it over meanwhile
+  // Tear the radio down unless a foreground activity took it over meanwhile.
+  // A cancel (book opened) does NOT claim the radio, so it falls through here and
+  // the WiFi/heap is released — exactly what we want so reading isn't disrupted.
   if (!foregroundClaimed) {
     WiFi.disconnect(false);
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -82,7 +91,7 @@ void syncTask(void*) {
   }
 
   LOG_DBG("TSYNC", "Background NTP sync %s%s", synced ? "succeeded" : "gave up",
-          foregroundClaimed ? " (foreground claimed WiFi)" : "");
+          foregroundClaimed ? " (foreground claimed WiFi)" : cancelRequested ? " (cancelled)" : "");
   taskActive = false;
   vTaskDelete(nullptr);
 }
@@ -105,6 +114,7 @@ void maybeStart() {
   if (WIFI_STORE.getCredentials().empty()) return;
 
   foregroundClaimed = false;
+  cancelRequested = false;
   taskActive = true;
   if (xTaskCreate(syncTask, "ntpsync", 4096, nullptr, tskIDLE_PRIORITY + 1, nullptr) != pdPASS) {
     taskActive = false;
@@ -113,5 +123,7 @@ void maybeStart() {
 }
 
 void claimForeground() { foregroundClaimed = true; }
+
+void cancel() { if (taskActive) cancelRequested = true; }
 
 }  // namespace OpportunisticTimeSync

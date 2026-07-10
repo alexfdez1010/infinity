@@ -11,6 +11,7 @@
 #include "home/HomeActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
+#include "network/OpportunisticTimeSync.h"
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
@@ -192,6 +193,9 @@ void ActivityManager::goToBrowser() {
 }
 
 void ActivityManager::goToReader(std::string path) {
+  // Kill any in-flight background NTP sync before loading a book so WiFi+TLS
+  // doesn't compete with the reader for heap/CPU on the single-core C3.
+  OpportunisticTimeSync::cancel();
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path)));
 }
 

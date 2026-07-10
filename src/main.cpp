@@ -677,7 +677,10 @@ void loop() {
     constexpr unsigned long NTP_FIRST_DELAY_MS = 90UL * 1000UL;
     constexpr unsigned long NTP_RETRY_INTERVAL_MS = 15UL * 60UL * 1000UL;
     const unsigned long nowMs = millis();
-    if (g_clockApproximate) {
+    // Never start a sync while a book is open: WiFi+TLS starves the reader on the
+    // single-core C3 and stalls page turns. It runs on Home/menus instead, and is
+    // cancelled outright if a book is opened mid-sync (see goToReader).
+    if (g_clockApproximate && !activityManager.isReaderActivity()) {
       if (!firstNtpDone) {
         if (nowMs >= NTP_FIRST_DELAY_MS) {
           firstNtpDone = true;
