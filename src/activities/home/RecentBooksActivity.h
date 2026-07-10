@@ -81,4 +81,5 @@ class RecentBooksActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void releaseCaches() override { freePageBuffer(); }
 };

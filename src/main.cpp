@@ -695,6 +695,7 @@ void loop() {
     // Never start a sync while a book is open: WiFi+TLS starves the reader on the
     // single-core C3 and stalls page turns. It runs on Home/menus instead, and is
     // cancelled outright if a book is opened mid-sync (see goToReader).
+    const bool wasBusy = OpportunisticTimeSync::busy();
     if (g_clockApproximate && !activityManager.isReaderActivity()) {
       if (!firstNtpDone) {
         if (nowMs >= NTP_FIRST_DELAY_MS) {
@@ -707,6 +708,24 @@ void loop() {
         OpportunisticTimeSync::maybeStart();
       }
     }
+    // The moment a sync arms, free the active screen's 48KB frame-buffer cache
+    // (Home/Recents) so the WiFi radio gets the contiguous heap it needs. Without
+    // this the driver wedged mid-init and hard-froze the device. Done under
+    // RenderLock so we don't yank a buffer the render task is using.
+    if (!wasBusy && OpportunisticTimeSync::busy()) {
+      // The radio can only be brought up at full CPU clock. After 3s idle the
+      // main loop downclocks the CPU; the sync fires at ~90s idle, so WiFi.mode()
+      // would run downclocked and HARD-FREEZE the device. Restore full clock now,
+      // before poll() touches WiFi. setPowerSaving keeps it full while WiFi is up.
+      powerManager.setPowerSaving(false);
+      // Also drop the active screen's 48KB frame-buffer cache so the radio has
+      // ample contiguous heap. Done under RenderLock (render task may be using it).
+      activityManager.releaseTopCaches();
+    }
+    // Drive the sync state machine every loop. It runs WiFi on THIS (main) task —
+    // one small step per iteration — so it never blocks the UI or freezes like the
+    // old background-task version did. IDLE-guarded, so cheap when nothing to do.
+    OpportunisticTimeSync::poll();
   }
 
   const unsigned long activityStartTime = millis();

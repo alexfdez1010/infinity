@@ -10,6 +10,8 @@
 #include <I18n.h>
 #include <Xtc.h>
 
+#include "network/OpportunisticTimeSync.h"
+
 extern FontDecompressor fontDecompressor;
 #ifdef ENABLE_BLE
 #include <BluetoothHIDManager.h>
@@ -37,6 +39,9 @@ extern FontDecompressor fontDecompressor;
 // ── Buffer management ─────────────────────────────────────────────────────────
 
 bool HomeActivity::storeCoverBuffer() {
+  // Don't hold the 48KB cache while an NTP sync is bringing up WiFi — the radio
+  // needs that contiguous heap or it wedges the device. Drop any existing cache.
+  if (OpportunisticTimeSync::busy()) { freeCoverBuffer(); return false; }
   uint8_t* fb = renderer.getFrameBuffer();
   if (!fb) return false;
   // Guard: need buffer size + 12KB overhead for heap fragmentation safety

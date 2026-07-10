@@ -10,6 +10,8 @@
 #include <I18n.h>
 #include <Xtc.h>
 
+#include "network/OpportunisticTimeSync.h"
+
 extern FontDecompressor fontDecompressor;
 #ifdef ENABLE_BLE
 #include <BluetoothHIDManager.h>
@@ -198,6 +200,8 @@ void RecentBooksActivity::onExit() {
 // ── Page frame-buffer cache ───────────────────────────────────────────────────
 
 bool RecentBooksActivity::storePageBuffer() {
+  // Release the 48KB cache while an NTP sync is bringing up WiFi (needs the heap).
+  if (OpportunisticTimeSync::busy()) { freePageBuffer(); return false; }
   uint8_t* fb = renderer.getFrameBuffer();
   if (!fb) return false;
   const size_t bufSize = renderer.getBufferSize();

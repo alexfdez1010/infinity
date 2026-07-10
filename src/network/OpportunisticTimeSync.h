@@ -4,18 +4,30 @@
 //
 // The ESP32-C3 has no battery-backed RTC: after deep sleep the clock is restored
 // from the drift-prone internal RC timer (g_clockApproximate). When the last NTP
-// sync is stale, this module silently scans for saved WiFi networks (falling back
-// to a blind connect to the last-used one, for hidden SSIDs) in a short-lived
-// background task, syncs time, and switches the radio back off. Skipped entirely
-// in manual clock mode. Zero impact on sleep current — it only runs while the
-// user woke the device anyway. main.cpp also retries it periodically while the
-// clock is still approximate (e.g. WiFi unreachable on wake).
+// sync is stale, this module blindly connects to a saved WiFi network (last-used
+// first), syncs time via SNTP, and switches the radio back off. Skipped entirely
+// in manual clock mode. main.cpp retries it periodically while the clock is still
+// approximate (e.g. WiFi unreachable on wake).
+//
+// It runs as a state machine driven from the main loop (poll()), NOT a background
+// task: WiFi.mode(WIFI_STA) must be called from the main Arduino task — from a
+// separate low-priority task at tight heap it hard-froze the whole device. poll()
+// advances only one small step per iteration, so the UI never blocks.
 namespace OpportunisticTimeSync {
 
-// Call once at boot, after clock restore + TZ setup and once the device has
-// committed to staying awake. Spawns the background task only when a sync is
-// warranted (approximate clock, stale sync, saved network); no-op otherwise.
+// Arm a sync when one is warranted (approximate clock, saved network, enough free
+// heap, not in manual mode, WiFi not already up). No-op otherwise. The actual
+// work happens in poll(). Call from the main loop.
 void maybeStart();
+
+// Advance the sync state machine one step. Call every main-loop iteration. Cheap
+// (a WiFi.status() check) except the one-time WiFi.mode(WIFI_STA) start.
+void poll();
+
+// True while a sync is armed or in progress. Activities that hold large heap
+// caches (Home/Recents 48KB frame buffers) consult this to stop re-caching so the
+// WiFi radio can get the contiguous heap it needs to come up.
+bool busy();
 
 // Foreground code that is about to take over the WiFi radio (activities doing
 // their own connect) calls this so the background task aborts without touching

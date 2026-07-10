@@ -243,6 +243,13 @@ bool ActivityManager::isReaderActivity() const { return currentActivity && curre
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
+void ActivityManager::releaseTopCaches() {
+  // Take RenderLock so the render task isn't mid-use of a cached frame buffer
+  // while the activity frees it.
+  RenderLock lock;
+  if (currentActivity) currentActivity->releaseCaches();
+}
+
 void ActivityManager::requestUpdate(bool immediate) {
   if (immediate) {
     if (renderTaskHandle) {

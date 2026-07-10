@@ -4,9 +4,10 @@
 #include <WiFi.h>
 #include <Logging.h>
 
-#include <atomic>
 #include <cstdlib>
 #include <ctime>
+#include <string>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "WifiCredentialStore.h"
@@ -16,114 +17,157 @@ extern bool g_clockApproximate;
 extern uint32_t g_lastNtpSyncUnix;
 
 namespace {
-constexpr int CONNECT_TIMEOUT_DS = 100;             // 10 s in 100 ms steps, per network
-constexpr int SYNC_TIMEOUT_DS = 150;                // 15 s in 100 ms steps
+constexpr uint32_t CONNECT_TIMEOUT_MS = 10000;  // per network
+constexpr uint32_t SYNC_TIMEOUT_MS = 15000;     // wait for the SNTP reply
 constexpr int MAX_NETWORK_ATTEMPTS = 3;
+constexpr uint32_t MIN_FREE_HEAP = 55000;
 
-std::atomic<bool> taskActive{false};
-std::atomic<bool> foregroundClaimed{false};
-// cancel() sets this when a book is opened mid-sync: like foregroundClaimed it
-// stops the task ASAP, but unlike it the task still tears the radio down (no
-// foreground consumer is waiting for WiFi — we just want the heap/CPU back).
-std::atomic<bool> cancelRequested{false};
+// State machine, driven entirely from the main loop via poll(). WiFi is brought
+// up on the main Arduino task on purpose: WiFi.mode(WIFI_STA) blocks on the
+// WiFi-start event, and when called from a separate low-priority FreeRTOS task
+// at tight heap that event was never delivered — the device hard-froze (no
+// reboot). Every other working WiFi user (Home, Weather, OTA) runs on the main
+// task, so we do too. poll() only advances a small slice per iteration, so the
+// UI never blocks for more than one WiFi.status() check.
+enum class State { IDLE, STARTING, CONNECTING, SYNCING, TEARDOWN };
 
-// True when the sync should stop early for any reason.
-inline bool aborted() { return foregroundClaimed || cancelRequested; }
+State state = State::IDLE;
+bool foregroundClaimed = false;
+std::vector<std::string> ssidQueue;  // networks left to try, in order
+size_t queueIdx = 0;
+uint32_t phaseStart = 0;  // millis() when the current connect/sync phase began
 
-// Connect to `cred` and wait for association. Returns true when connected.
-bool connectTo(const WifiCredential& cred) {
-  LOG_DBG("TSYNC", "Background NTP sync: connecting to %s", cred.ssid.c_str());
-  WiFi.begin(cred.ssid.c_str(), cred.password.c_str());
-  for (int i = 0; i < CONNECT_TIMEOUT_DS && !aborted(); i++) {
-    if (WiFi.status() == WL_CONNECTED) return true;
-    vTaskDelay(pdMS_TO_TICKS(100));
-  }
-  return WiFi.status() == WL_CONNECTED;
-}
-
-void syncTask(void*) {
-  bool synced = false;
-  bool connected = false;
-
-  WiFi.mode(WIFI_STA);
-
-  // Scan and try saved networks strongest-first (scan results come RSSI-sorted).
-  // Falls back to a blind connect to the last-used network below — hidden SSIDs
-  // don't show up in a scan.
-  const int found = aborted() ? 0 : WiFi.scanNetworks();
-  int attempts = 0;
-  for (int i = 0; i < found && !connected && !aborted() && attempts < MAX_NETWORK_ATTEMPTS; i++) {
-    const auto* cred = WIFI_STORE.findCredential(WiFi.SSID(i).c_str());
-    if (!cred) continue;
-    attempts++;
-    connected = connectTo(*cred);
-    if (!connected) WiFi.disconnect(false);
-  }
-  WiFi.scanDelete();
-
-  if (!connected && attempts == 0 && !aborted()) {
-    const auto& ssid = WIFI_STORE.getLastConnectedSsid();
-    const auto* cred = ssid.empty() ? nullptr : WIFI_STORE.findCredential(ssid);
-    if (cred) connected = connectTo(*cred);
-  }
-
-  if (connected && !aborted()) {
-    // configTzTime starts SNTP; onNtpSyncComplete (main.cpp) clears
-    // g_clockApproximate and stamps g_lastNtpSyncUnix when the reply lands
-    const char* tz = getenv("TZ");
-    configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
-    for (int i = 0; i < SYNC_TIMEOUT_DS && !aborted(); i++) {
-      if (!g_clockApproximate) {
-        synced = true;
-        break;
-      }
-      vTaskDelay(pdMS_TO_TICKS(100));
-    }
-  }
-
-  // Tear the radio down unless a foreground activity took it over meanwhile.
-  // A cancel (book opened) does NOT claim the radio, so it falls through here and
-  // the WiFi/heap is released — exactly what we want so reading isn't disrupted.
+void teardownRadio() {
   if (!foregroundClaimed) {
     WiFi.disconnect(false);
-    vTaskDelay(pdMS_TO_TICKS(100));
     WiFi.mode(WIFI_OFF);
   }
+}
 
-  LOG_DBG("TSYNC", "Background NTP sync %s%s", synced ? "succeeded" : "gave up",
-          foregroundClaimed ? " (foreground claimed WiFi)" : cancelRequested ? " (cancelled)" : "");
-  taskActive = false;
-  vTaskDelete(nullptr);
+// Begin connecting to ssidQueue[queueIdx]; returns false if the credential
+// vanished (skip it).
+bool beginCurrent() {
+  const auto* cred = WIFI_STORE.findCredential(ssidQueue[queueIdx]);
+  if (!cred) return false;
+  LOG_INF("TSYNC", "Connecting to %s (heap=%u)", cred->ssid.c_str(), ESP.getFreeHeap());
+  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+  phaseStart = millis();
+  return true;
 }
 }  // namespace
 
 namespace OpportunisticTimeSync {
 
 void maybeStart() {
-  if (taskActive) return;
-  if (!g_clockApproximate) return;  // clock already NTP-accurate this boot
+  if (state != State::IDLE) return;             // already running
+  if (!g_clockApproximate) return;              // clock already NTP-accurate this boot
   if (SETTINGS.clockMode == CrossPointSettings::CLOCK_MANUAL) return;  // user manages time by hand
   if (WiFi.status() == WL_CONNECTED) return;
 
-  // No epoch-based rate limit on purpose: it would measure staleness with the very
-  // clock we distrust (a clock hours behind reports the last sync as "recent" and
-  // skips the fix). g_clockApproximate already caps this at one successful sync per
-  // boot, and the 15-min retry in main loop only fires while still unsynced.
+  const uint32_t freeHeap = ESP.getFreeHeap();
+  if (freeHeap < MIN_FREE_HEAP) {
+    LOG_ERR("TSYNC", "Skipping NTP sync: only %u B free heap (< %u)", freeHeap, MIN_FREE_HEAP);
+    return;
+  }
 
   WIFI_STORE.loadFromFile();
   if (WIFI_STORE.getCredentials().empty()) return;
 
+  // Build the try-queue: last-used network first, then the rest, capped. No
+  // WiFi.scanNetworks() — the scan's AP-list buffer spiked heap and reaching
+  // hidden SSIDs needs a blind begin() anyway.
+  ssidQueue.clear();
+  const auto& last = WIFI_STORE.getLastConnectedSsid();
+  if (!last.empty() && WIFI_STORE.findCredential(last)) ssidQueue.push_back(last);
+  for (const auto& cred : WIFI_STORE.getCredentials()) {
+    if ((int)ssidQueue.size() >= MAX_NETWORK_ATTEMPTS) break;
+    if (cred.ssid == last) continue;
+    ssidQueue.push_back(cred.ssid);
+  }
+  if (ssidQueue.empty()) return;
+
+  queueIdx = 0;
   foregroundClaimed = false;
-  cancelRequested = false;
-  taskActive = true;
-  if (xTaskCreate(syncTask, "ntpsync", 4096, nullptr, tskIDLE_PRIORITY + 1, nullptr) != pdPASS) {
-    taskActive = false;
-    LOG_ERR("TSYNC", "Failed to create background NTP sync task");
+  state = State::STARTING;
+}
+
+void poll() {
+  switch (state) {
+    case State::IDLE:
+      return;
+
+    case State::STARTING:
+      // Must be at full CPU clock here (caller restores it) or the radio wedges.
+      WiFi.mode(WIFI_STA);  // one-time ~200-500ms hitch on the main task (safe here)
+      if (!beginCurrent()) {
+        // Credential disappeared; try the next, or give up.
+        if (++queueIdx >= ssidQueue.size()) { state = State::TEARDOWN; return; }
+        return;  // retry beginCurrent next poll
+      }
+      state = State::CONNECTING;
+      return;
+
+    case State::CONNECTING:
+      if (WiFi.status() == WL_CONNECTED) {
+        // configTzTime starts SNTP; onNtpSyncComplete (main.cpp) clears
+        // g_clockApproximate and stamps g_lastNtpSyncUnix when the reply lands.
+        const char* tz = getenv("TZ");
+        configTzTime(tz ? tz : "UTC0", "pool.ntp.org", "time.google.com");
+        phaseStart = millis();
+        state = State::SYNCING;
+        return;
+      }
+      if (millis() - phaseStart >= CONNECT_TIMEOUT_MS) {
+        WiFi.disconnect(false);
+        if (++queueIdx >= ssidQueue.size()) {
+          LOG_INF("TSYNC", "NTP sync gave up: no network connected");
+          state = State::TEARDOWN;
+          return;
+        }
+        if (!beginCurrent()) { state = State::TEARDOWN; }  // next credential gone
+      }
+      return;
+
+    case State::SYNCING:
+      if (!g_clockApproximate) {
+        LOG_INF("TSYNC", "NTP sync succeeded");
+        state = State::TEARDOWN;
+        return;
+      }
+      if (millis() - phaseStart >= SYNC_TIMEOUT_MS) {
+        LOG_INF("TSYNC", "NTP sync timed out waiting for reply");
+        state = State::TEARDOWN;
+      }
+      return;
+
+    case State::TEARDOWN:
+      teardownRadio();
+      ssidQueue.clear();
+      queueIdx = 0;
+      state = State::IDLE;
+      return;
   }
 }
 
-void claimForeground() { foregroundClaimed = true; }
+bool busy() { return state != State::IDLE; }
 
-void cancel() { if (taskActive) cancelRequested = true; }
+void claimForeground() {
+  // A foreground activity is taking over the radio. Stop advancing and leave
+  // WiFi exactly as-is for it — do NOT tear the radio down.
+  foregroundClaimed = true;
+  ssidQueue.clear();
+  queueIdx = 0;
+  state = State::IDLE;
+}
+
+void cancel() {
+  // Abort and release the radio (e.g. a book was opened). Tear WiFi down so the
+  // reader isn't starved, unless a foreground consumer claimed it.
+  if (state == State::IDLE) return;
+  teardownRadio();
+  ssidQueue.clear();
+  queueIdx = 0;
+  state = State::IDLE;
+}
 
 }  // namespace OpportunisticTimeSync

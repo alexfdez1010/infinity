@@ -101,6 +101,9 @@ class ActivityManager {
   bool isReaderActivity() const;
   bool skipLoopDelay() const;
 
+  // Ask the active activity to drop large heap caches (before WiFi bring-up).
+  void releaseTopCaches();
+
   // If immediate is true, the update will be triggered immediately.
   // Otherwise, it will be deferred until the end of the current loop iteration.
   void requestUpdate(bool immediate = false);

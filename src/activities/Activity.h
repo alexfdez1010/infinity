@@ -44,6 +44,11 @@ class Activity {
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
 
+  // Drop large, reconstructible heap caches (e.g. cached frame buffers). Called
+  // before the device brings up the WiFi radio, which needs a big contiguous heap
+  // block. Default: nothing to release.
+  virtual void releaseCaches() {}
+
   // Start a new activity without destroying the current one
   // Note: requestUpdate() will be invoked automatically once resultHandler finishes
   void startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler resultHandler);
