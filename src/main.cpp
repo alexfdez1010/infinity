@@ -629,6 +629,21 @@ void loop() {
     return;
   }
 
+  // Global recovery: hold Back ~6s to hard-restart. Escape hatch when an activity
+  // stops responding to normal input (e.g. WiFi/NTP contention leaves the UI stuck).
+  // Runs before activityManager.loop() so a stuck activity can't swallow it. The 6s
+  // threshold sits well above the 1s go-home / 0.8s sync long-presses, so it only
+  // fires on a deliberate long hold and never clashes with normal navigation.
+  {
+    const bool backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back) &&
+                          !gpio.isPressed(HalGPIO::BTN_POWER);
+    if (backHeld && gpio.getHeldTime() >= 6000) {
+      LOG_INF("SYS", "Long-press Back recovery: restarting device");
+      delay(20);  // let the log flush before the reset
+      ESP.restart();
+    }
+  }
+
   // Multi-click power button detection (single/double/triple click)
   // Resolve action once per frame — reader activities read it via getPowerClickAction()
   pwrClickDetector.update(gpio.wasReleased(HalGPIO::BTN_POWER));
