@@ -1012,14 +1012,30 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   {
     auto p = section->loadPageFromSectionFile();
     if (!p) {
+      // A page whose serialized body won't deserialize passes loadSectionFile()
+      // (only offsets are validated) but fails here. clearCache()+rebuild does not
+      // verify pages, so an unrecoverable page would re-fail forever — the render
+      // task would spin, rebuilding the chapter on every pass, starving the task
+      // watchdog into a reboot (which then boots to Home via the crash guard).
+      // Rebuild at most once; if it still fails, stop and leave a responsive screen.
+      if (++pageLoadFailCount >= 2) {
+        LOG_ERR("ERS", "Page %d unrecoverable after cache rebuild - aborting retry", section->currentPage);
+        renderer.clearScreen();
+        renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
+        renderStatusBar();
+        renderer.displayBuffer();
+        automaticPageTurnActive = false;
+        pageLoadFailCount = 0;
+        return;
+      }
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
       section->clearCache();
       section.reset();
-      requestUpdate();  // Try again after clearing cache
-                        // TODO: prevent infinite loop if the page keeps failing to load for some reason
+      requestUpdate();  // Try again after clearing cache (bounded by pageLoadFailCount)
       automaticPageTurnActive = false;
       return;
     }
+    pageLoadFailCount = 0;  // page loaded — the reader is up and stable
 
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);
@@ -1033,6 +1049,17 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+
+  // A full render completed without a watchdog reset — the reader is stable.
+  // Clear the boot crash guard now. It is set to 1 before goToReader() on wake
+  // (main.cpp) and, if left until onExit(), a later hang/reset mid-reading would
+  // strand it and force the next boot to Home instead of resuming the book.
+  // Doing it here (after page load + next-chapter prefetch) bounds the guard to a
+  // genuinely stable render. Guarded write so page turns don't hit the SD.
+  if (APP_STATE.readerActivityLoadCount != 0) {
+    APP_STATE.readerActivityLoadCount = 0;
+    APP_STATE.saveToFile();
+  }
 
   if (pendingScreenshot) {
     pendingScreenshot = false;

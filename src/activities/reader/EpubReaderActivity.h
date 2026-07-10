@@ -33,6 +33,7 @@ class EpubReaderActivity final : public Activity {
   bool automaticPageTurnActive = false;
   bool bookCompletionNotified = false;
   bool ignoreFrontButtons = false;
+  uint8_t pageLoadFailCount = 0;  // bounds the clear-cache-and-retry loop when a page won't deserialize
 
   // Chapter completion celebration (Phase 2)
   int lastCompletedSpineIndex = -1;   // prevents double-fire on back-then-forward
