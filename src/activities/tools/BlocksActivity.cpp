@@ -3,11 +3,9 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <esp_random.h>
-#include <queue>
-#include <unordered_set>
-#include <vector>
 
 #include "GameScores.h"
 #include "components/UITheme.h"
@@ -82,47 +80,92 @@ bool BlocksActivity::targetEscaped() const {
 // every piece's variable coordinate (col for horizontal pieces, row for
 // vertical ones); the fixed coordinate, length and orientation never change.
 // Coordinates are 0..5, so each piece packs into 3 bits and up to 14 pieces fit
-// in a uint64 key. Returns the minimum number of piece-moves to free the
-// target, or -1 if unsolvable within the bounded state cap.
+// into a 42-bit uint64 key.
+//
+// The visited set and BFS frontier are plain heap arrays, not std::unordered_set
+// / std::queue: on the C3 those grew to hundreds of KB of node allocations for
+// the deep (medium/hard) boards — whose goal state only appears after most of
+// the reachable space has been expanded — and exhausted the heap. Here the
+// visited set is a fixed open-addressing table and the frontier is a compact
+// array of table indices, capped so peak heap stays bounded (~72 KB). Returns
+// the minimum number of piece-moves to free the target, or -1 if the board is
+// unsolvable, too large for the state cap, or memory is too tight to search
+// (all treated the same by the caller: discard and retry / fall back).
 int BlocksActivity::solve() const {
-  static constexpr int MAX_STATES = 20000;  // bound RAM/time on the C3
+  // Bound distinct states so peak heap is predictable. Deep boards that need
+  // more than this to reach the goal are reported as -1 and discarded upstream.
+  static constexpr int VISIT_CAP = 4000;            // max distinct states
+  static constexpr size_t TABLE = 8192;             // pow2 open-addressing slots
+  static constexpr int TABLE_BITS = 13;             // log2(TABLE)
+  static constexpr uint64_t OCCUPIED = 1ull << 63;  // slot-in-use flag
+  static constexpr uint64_t KEY_MASK = (1ull << 42) - 1;
+  static constexpr int DIST_SHIFT = 48;             // dist lives in bits 48..61
+  static constexpr uint64_t DIST_MASK = (1ull << 14) - 1;
+
+  const int n = pieceCount;
 
   // Fixed descriptors + the starting variable coordinate of each piece.
   uint8_t fixedLine[MAX_PIECES];
   uint8_t len[MAX_PIECES];
   bool horiz[MAX_PIECES];
   uint8_t startVar[MAX_PIECES];
-  for (int i = 0; i < pieceCount; i++) {
+  for (int i = 0; i < n; i++) {
     horiz[i] = pieces[i].horizontal;
     len[i] = pieces[i].len;
     fixedLine[i] = horiz[i] ? pieces[i].row : pieces[i].col;
     startVar[i] = horiz[i] ? pieces[i].col : pieces[i].row;
   }
 
-  const int n = pieceCount;
   auto encode = [&](const uint8_t* var) -> uint64_t {
     uint64_t key = 0;
     for (int i = 0; i < n; i++) key |= static_cast<uint64_t>(var[i] & 7u) << (3 * i);
     return key;
   };
 
-  std::unordered_set<uint64_t> visited;
-  std::queue<std::pair<uint64_t, int>> frontier;
-  const uint64_t start = encode(startVar);
-  visited.insert(start);
-  frontier.push({start, 0});
+  // Heap buffers, freed before every return. visited slots hold
+  // OCCUPIED | dist<<DIST_SHIFT | key; an all-zero slot is empty. The frontier
+  // stores table indices (TABLE <= 65535 fits a uint16) to stay small.
+  uint64_t* visited = static_cast<uint64_t*>(calloc(TABLE, sizeof(uint64_t)));
+  uint16_t* frontier = static_cast<uint16_t*>(malloc(VISIT_CAP * sizeof(uint16_t)));
+  if (!visited || !frontier) {
+    free(visited);
+    free(frontier);
+    return -1;  // heap too tight — let the caller fall back
+  }
 
-  int expanded = 0;
-  while (!frontier.empty()) {
-    if (++expanded > MAX_STATES) return -1;  // too big — treat as unsolvable
-    const uint64_t key = frontier.front().first;
-    const int dist = frontier.front().second;
-    frontier.pop();
+  // Find the slot for a key (linear probe). Returns the slot holding the key, or
+  // the first empty slot if absent.
+  auto slotFor = [&](uint64_t key) -> size_t {
+    uint64_t h = key * 0x9E3779B97F4A7C15ull;  // mix, then take the top bits
+    size_t idx = static_cast<size_t>(h >> (64 - TABLE_BITS));
+    while (visited[idx] != 0 && (visited[idx] & KEY_MASK) != key) idx = (idx + 1) & (TABLE - 1);
+    return idx;
+  };
 
-    // Unpack the state and check the goal (target's right cell at the exit).
-    uint8_t var[MAX_PIECES];
+  int result = -1;
+  int visitCount = 0;
+  int qHead = 0, qTail = 0;
+
+  {
+    const uint64_t s = encode(startVar);
+    const size_t idx = slotFor(s);
+    visited[idx] = OCCUPIED | s;  // dist 0
+    frontier[qTail++] = static_cast<uint16_t>(idx);
+    visitCount++;
+  }
+
+  uint8_t var[MAX_PIECES];
+  uint8_t nvar[MAX_PIECES];
+  while (qHead < qTail) {
+    const uint64_t entry = visited[frontier[qHead++]];
+    const uint64_t key = entry & KEY_MASK;
+    const int dist = static_cast<int>((entry >> DIST_SHIFT) & DIST_MASK);
+
     for (int i = 0; i < n; i++) var[i] = static_cast<uint8_t>((key >> (3 * i)) & 7u);
-    if (var[0] + len[0] >= BOARD) return dist;
+    if (var[0] + len[0] >= BOARD) {  // target reached the exit
+      result = dist;
+      break;
+    }
 
     // Occupancy for this state.
     int8_t grid[BOARD][BOARD];
@@ -137,7 +180,8 @@ int BlocksActivity::solve() const {
 
     // Each piece can try to step -1 or +1 along its axis; only the single cell
     // it newly enters needs to be empty.
-    for (int i = 0; i < n; i++) {
+    bool capped = false;
+    for (int i = 0; i < n && !capped; i++) {
       for (int delta = -1; delta <= 1; delta += 2) {
         const int nv = var[i] + delta;
         if (nv < 0 || nv + len[i] > BOARD) continue;  // off the board
@@ -151,18 +195,26 @@ int BlocksActivity::solve() const {
         }
         if (grid[r][c] != -1) continue;  // blocked
 
-        uint8_t nvar[MAX_PIECES];
         memcpy(nvar, var, sizeof(uint8_t) * n);
         nvar[i] = static_cast<uint8_t>(nv);
         const uint64_t nkey = encode(nvar);
-        if (visited.count(nkey)) continue;
-        if (visited.size() >= static_cast<size_t>(MAX_STATES)) return -1;  // cap the visited set
-        visited.insert(nkey);
-        frontier.push({nkey, dist + 1});
+        const size_t nidx = slotFor(nkey);
+        if (visited[nidx] != 0) continue;  // already seen
+        if (visitCount >= VISIT_CAP) {     // hit the state cap — treat as unsolvable
+          capped = true;
+          break;
+        }
+        visited[nidx] = OCCUPIED | (static_cast<uint64_t>(dist + 1) << DIST_SHIFT) | nkey;
+        frontier[qTail++] = static_cast<uint16_t>(nidx);
+        visitCount++;
       }
     }
+    if (capped) break;
   }
-  return -1;  // exhausted without reaching the goal — unsolvable
+
+  free(visited);
+  free(frontier);
+  return result;
 }
 
 // --- Generation ---
@@ -258,6 +310,9 @@ void BlocksActivity::newPuzzle() {
   bool found = false;
 
   for (int attempt = 0; attempt < 300 && !found; attempt++) {
+    // Yield each attempt so the idle task runs and the task watchdog is fed —
+    // a long streak of BFS searches would otherwise hog this single-core CPU.
+    delay(1);
     generate(difficulty);
     const int sol = solve();
     if (sol < 0) continue;  // unsolvable within the state cap — discard
