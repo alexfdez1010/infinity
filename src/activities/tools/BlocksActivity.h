@@ -38,7 +38,7 @@ class BlocksActivity final : public Activity {
     bool horizontal;
   };
 
-  enum class State { SELECT, PLAY, WON };
+  enum class State { SELECT, GENERATING, PLAY, WON };
 
   State state = State::SELECT;
   int difficulty = 0;      // 0 = easy, 1 = medium, 2 = hard
@@ -63,6 +63,9 @@ class BlocksActivity final : public Activity {
   void loadFallback(int diff);
   // Build a solvable, difficulty-graded board (retrying + solving). Never hangs.
   void newPuzzle();
+  // Show the "generating" screen, then build a fresh board. Board generation can
+  // take a moment (repeated BFS solves), so this flushes a loading frame first.
+  void startNewPuzzle();
   // Breadth-first search over board states: minimum number of piece-moves to
   // free the target, or -1 if unsolvable within the bounded state cap.
   int solve() const;

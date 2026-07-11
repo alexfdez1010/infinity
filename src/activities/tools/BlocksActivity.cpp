@@ -340,6 +340,15 @@ void BlocksActivity::newPuzzle() {
   requestUpdate();
 }
 
+// Draw the loading screen, wait for it to actually reach the (slow) e-ink panel,
+// then run the heavy board generation. Without the blocking flush the generation
+// would hog the loop before the loading frame ever showed.
+void BlocksActivity::startNewPuzzle() {
+  state = State::GENERATING;
+  requestUpdateAndWait();  // render + flush the "generating" frame before we block
+  newPuzzle();             // heavy: switches to PLAY and requests its own update
+}
+
 void BlocksActivity::recordBest() {
   // Best = fewest moves; 0 means "no record yet".
   if (GAME_SCORES.bestBlocks[difficulty] == 0 || moves < GAME_SCORES.bestBlocks[difficulty]) {
@@ -375,7 +384,7 @@ void BlocksActivity::loop() {
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       difficulty = menuSel;
-      newPuzzle();  // generates the board and switches to PLAY
+      startNewPuzzle();  // shows loading, generates the board, switches to PLAY
       return;
     }
     return;
@@ -388,7 +397,7 @@ void BlocksActivity::loop() {
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      newPuzzle();  // fresh board, same difficulty
+      startNewPuzzle();  // fresh board, same difficulty (with loading screen)
       return;
     }
     return;
@@ -451,6 +460,15 @@ void BlocksActivity::render(RenderLock&&) {
     const auto labels =
         mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+    return;
+  }
+
+  // GENERATING: a plain loading screen while the solver churns out a board.
+  if (state == State::GENERATING) {
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_BLOCKS));
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - renderer.getLineHeight(UI_12_FONT_ID) / 2,
+                              tr(STR_GENERATING_BOARD));
     renderer.displayBuffer();
     return;
   }
