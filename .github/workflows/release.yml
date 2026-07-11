@@ -2,17 +2,16 @@ name: Build Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag/name (e.g. v1.8.4). Leave empty for a dev build.'
-        required: false
-        default: ''
 
 permissions:
   contents: write
+
+concurrency:
+  group: build-release
+  cancel-in-progress: true
 
 jobs:
   build-release:
@@ -23,14 +22,8 @@ jobs:
       - name: Resolve version
         id: ver
         run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            NAME="${{ github.event.inputs.tag }}"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            NAME="${{ github.ref_name }}"
-          else
-            NAME="dev-${GITHUB_SHA::7}"
-          fi
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          VER=$(sed -n 's/^version[[:space:]]*=[[:space:]]*//p' platformio.ini | head -n1)
+          echo "name=v${VER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@v5
         with:
@@ -75,25 +68,26 @@ jobs:
             .pio/build/gh_release/firmware.bin
             .pio/build/gh_release/firmware.elf
 
-      - name: Publish GitHub Release
-        if: github.ref_type == 'tag' || github.event.inputs.tag != ''
+      - name: Publish rolling "latest" release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.ver.outputs.name }}
+          tag_name: latest
           name: Infinity ${{ steps.ver.outputs.name }}
-          generate_release_notes: true
+          prerelease: true
           files: |
             .pio/build/gh_release/Infinity-${{ steps.ver.outputs.name }}-merged.bin
             .pio/build/gh_release/bootloader.bin
             .pio/build/gh_release/partitions.bin
             .pio/build/gh_release/firmware.bin
           body: |
+            Latest automatic build from `master` — commit `${{ github.sha }}`.
+
             ## Flashing
 
             **Easiest — single file, flash at offset `0x0`:**
             ```
             esptool --chip esp32c3 write_flash 0x0 Infinity-${{ steps.ver.outputs.name }}-merged.bin
             ```
-            Or use the web flasher at https://espressif.github.io/esptool-js/ — connect over USB, add `Infinity-${{ steps.ver.outputs.name }}-merged.bin` at address `0x0`, and program.
+            Or use the web flasher at https://espressif.github.io/esptool-js/ — connect over USB, add the merged `.bin` at address `0x0`, and program.
 
             **OTA / advanced:** flash `firmware.bin` alone at `0x10000` to keep existing settings.
