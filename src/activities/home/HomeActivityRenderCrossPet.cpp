@@ -250,7 +250,6 @@ void HomeActivity::renderReadingStatsBar() {
 
   // Stats panel dimensions — 3-column card
   constexpr int panelH = 72;
-  constexpr int panelR = 12;
   const int panelX = CP_CARD_MARGIN;
   const int panelY = (recentBottom + barY - panelH) / 2;
   const int panelW = areaW;

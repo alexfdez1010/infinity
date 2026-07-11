@@ -383,4 +383,3 @@ void HomeActivity::onRecentBooksOpen() { activityManager.goToRecentBooks(); }
 void HomeActivity::onFileTransferOpen(){ activityManager.goToFileTransfer(); }
 void HomeActivity::onSettingsOpen()    { activityManager.goToSettings(); }
 void HomeActivity::onToolsOpen()       { activityManager.goToTools(); }
-void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }

@@ -81,7 +81,6 @@ class WifiSelectionActivity final : public Activity {
   unsigned long connectionStartTime = 0;
 
   void renderNetworkList() const;
-  void renderPasswordEntry() const;
   void renderConnecting() const;
   void renderConnected() const;
   void renderSavePrompt() const;

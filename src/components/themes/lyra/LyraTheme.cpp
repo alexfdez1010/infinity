@@ -40,7 +40,6 @@ constexpr int popupMarginY = 12;
 constexpr int maxListValueWidth = 200;
 constexpr int mainMenuIconSize = 32;
 constexpr int listIconSize = 24;
-constexpr int mainMenuColumns = 2;
 int coverWidth = 0;
 
 void drawLyraBatteryIcon(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight,

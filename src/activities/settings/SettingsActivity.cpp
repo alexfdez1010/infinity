@@ -56,8 +56,6 @@ void SettingsActivity::onEnter() {
       // Redirect CrossPet-specific settings to CrossPet tab
       if (setting.nameId == StrId::STR_HOME_FOCUS_MODE) continue;
       if (setting.nameId == StrId::STR_DARK_MODE) continue;
-      if (setting.nameId == StrId::STR_KEEP_CLOCK_ALIVE) continue;
-      if (setting.nameId == StrId::STR_SLEEP_REFRESH) continue;
       if (setting.nameId == StrId::STR_TEMP_UNIT) continue;
       if (setting.nameId == StrId::STR_CLOCK_MODE) continue;  // already in CrossPet CLOCK section
       if (setting.nameId == StrId::STR_TIMEZONE) continue;    // already in CrossPet CLOCK section

@@ -37,7 +37,6 @@ class HomeActivity final : public Activity {
   void onFileTransferOpen();
   void onSettingsOpen();
   void onToolsOpen();
-  void onOpdsBrowserOpen();
 
   bool storeCoverBuffer();    // Store frame buffer for cover image
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover

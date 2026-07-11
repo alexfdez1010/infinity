@@ -58,10 +58,6 @@ class CrossPetTheme : public LyraTheme {
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const override;
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const override;
-  // Two-button confirm dialog: white card, 1px border, title + body + Cancel/Confirm
-  virtual void drawConfirmDialog(const GfxRenderer& renderer, const char* title,
-                                 const char* body, const char* cancelLabel,
-                                 const char* confirmLabel, bool confirmSelected) const;
   void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
                        const char* secondaryLabel = nullptr,
                        KeyboardKeyType keyType = KeyboardKeyType::Normal,

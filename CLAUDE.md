@@ -79,7 +79,7 @@ UI Activities → ActivityManager → Subsystems (EPUB, Network, Gamification) �
 
 **`src/`** (application code):
 - `main.cpp` — entry point, HAL init, activity manager setup, main loop
-- `activities/` — UI screens organized by domain: `reader/`, `home/`, `settings/`, `tools/`, `network/`, `boot_sleep/`, `browser/`, `flashcard/`
+- `activities/` — UI screens organized by domain: `reader/`, `home/`, `settings/`, `tools/`, `network/`, `boot_sleep/`, `browser/`, `util/`
 - `gamification/` — reading gamification layer (`Gamification.h/.cpp`): daily goals, streaks with freeze tokens, achievement badges; consumes `ReadingStats`, persists as JSON on SD
 - `components/` — `UITheme`, icon bitmaps, theme assets
 - `network/` — `CrossPointWebServer` (HTTP + WebSocket), `OtaUpdater`, `WebDAVHandler`, `OpportunisticTimeSync` (background NTP resync on wake — the X4 has no battery-backed RTC), generated HTML in `html/`

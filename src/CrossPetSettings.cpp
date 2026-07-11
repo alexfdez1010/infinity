@@ -17,7 +17,6 @@ bool CrossPetSettings::saveToFile() const {
   JsonDocument doc;
   doc["appClock"] = appClock;
   doc["appReadingStats"] = appReadingStats;
-  doc["appReadingGoals"] = appReadingGoals;
   doc["appGames"] = appGames;
 
   String json;
@@ -55,7 +54,6 @@ bool CrossPetSettings::loadFromFile() {
 
       // Reading stats & goals are always active.
       appReadingStats = 1;
-      appReadingGoals = 1;
       appGames = doc["appGames"] | (uint8_t)1;
       LOG_DBG("CPS", "CrossPet settings loaded from file");
       return true;

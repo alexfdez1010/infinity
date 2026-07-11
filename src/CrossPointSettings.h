@@ -249,11 +249,6 @@ class CrossPointSettings {
   // keepClockAlive removed from UI — always 0. Kept for JSON backward compat (ignored on load).
   uint8_t keepClockAlive = 0;
 
-  // Periodic sleep screen refresh interval (requires keepClockAlive=1).
-  // 0=OFF, 1=1min, 2=5min, 3=10min, 4=30min, 5=60min
-  enum SLEEP_REFRESH_INTERVAL { REFRESH_OFF = 0, REFRESH_1M = 1, REFRESH_5M = 2, REFRESH_10M = 3, REFRESH_30M = 4, REFRESH_60M = 5, SLEEP_REFRESH_INTERVAL_COUNT };
-  uint8_t sleepRefreshInterval = REFRESH_OFF;
-
   // Clock mode: 0=NTP (auto via WiFi), 1=Manual (user sets time)
   enum CLOCK_MODE { CLOCK_NTP = 0, CLOCK_MANUAL = 1, CLOCK_MODE_COUNT };
   uint8_t clockMode = CLOCK_NTP;
@@ -276,11 +271,6 @@ class CrossPointSettings {
   // setenv("TZ")+tzset() from the timezone setting — call after boot restore or a setting change
   static void applyTimezone();
 
-  static uint32_t getSleepRefreshMinutes(const uint8_t setting) {
-    constexpr uint32_t intervals[] = {0, 1, 5, 10, 30, 60};
-    return setting < SLEEP_REFRESH_INTERVAL_COUNT ? intervals[setting] : 0;
-  }
-
   ~CrossPointSettings() = default;
 
   // Get singleton instance
@@ -290,9 +280,6 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
-
-  // If count_only is true, returns the number of settings items that would be written.
-  uint8_t writeSettings(FsFile& file, bool count_only = false) const;
 
   bool saveToFile() const;
   bool loadFromFile();

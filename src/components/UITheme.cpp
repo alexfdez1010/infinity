@@ -13,10 +13,6 @@
 #include "components/themes/lyra/LyraTheme.h"
 #include "components/themes/crosspet/CrossPetTheme.h"
 
-namespace {
-constexpr int SKIP_PAGE_MS = 700;
-}  // namespace
-
 UITheme UITheme::instance;
 
 UITheme::UITheme() {

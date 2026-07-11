@@ -28,7 +28,6 @@ class CrossPetSettings {
   uint8_t appClock = 1;
   // Reading stats & goals are always active (no toggle).
   uint8_t appReadingStats = 1;
-  uint8_t appReadingGoals = 1;  // Gamification: goals, streaks, achievements
   uint8_t appGames = 1;  // Master toggle for all games (2048, Sliding Puzzle, Apagón, Senku)
 
  private:

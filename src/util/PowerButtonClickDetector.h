@@ -28,9 +28,6 @@ class PowerButtonClickDetector {
   /// Returns finalized click count (1/2/3) for one frame, then 0.
   uint8_t getClickCount() const { return finalizedClicks_; }
 
-  /// Returns true if currently accumulating clicks (waiting for timeout).
-  bool isPending() const { return pendingClicks_ > 0; }
-
  private:
   uint8_t pendingClicks_ = 0;
   uint8_t finalizedClicks_ = 0;

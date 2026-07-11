@@ -67,9 +67,6 @@ class CrossPointWebServer {
 
   WsUploadStatus getWsUploadStatus() const;
 
-  // Get the port number
-  uint16_t getPort() const { return port; }
-
  private:
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;
@@ -83,11 +80,9 @@ class CrossPointWebServer {
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
   static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
-  void abortWsUpload(const char* tag);
 
   // File scanning
   void scanFiles(const char* path, bool showHidden, const std::function<void(FileInfo)>& callback) const;
-  String formatFileSize(size_t bytes) const;
   bool isEpubFile(const String& filename) const;
 
   // Request handlers

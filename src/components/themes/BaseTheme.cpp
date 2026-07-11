@@ -22,8 +22,6 @@
 
 // Internal constants
 namespace {
-constexpr int homeMenuMargin = 20;
-constexpr int homeMarginTop = 30;
 constexpr int subtitleY = 738;
 
 // Helper: draw battery icon at given position

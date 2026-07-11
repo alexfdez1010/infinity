@@ -59,9 +59,6 @@ constexpr int kPopupMarginX = 16;
 constexpr int kPopupMarginY = 12;
 // Button hints geometry: 4 positions in portrait (58, 146, 254, 342)
 constexpr int kBtnPositions[] = {58, 146, 254, 342};
-constexpr int kBtnWidth = 80;
-constexpr int kBtnHeight = 40;     // same as buttonHintsHeight
-constexpr int kShapeSize = 10;     // triangle/circle half-size
 }  // namespace
 
 // ── Header ────────────────────────────────────────────────────────────────────
@@ -374,83 +371,6 @@ Rect CrossPetTheme::drawPopup(const GfxRenderer& renderer, const char* message) 
   renderer.displayBuffer();
 
   return Rect{x, y, w, h};
-}
-
-// ── Confirm dialog — two-button card ─────────────────────────────────────────
-
-void CrossPetTheme::drawConfirmDialog(const GfxRenderer& renderer, const char* title,
-                                      const char* body, const char* cancelLabel,
-                                      const char* confirmLabel, bool confirmSelected) const {
-  const int sw = renderer.getScreenWidth();
-  const int sh = renderer.getScreenHeight();
-  constexpr int margin = 30;
-  constexpr int pad = 16;
-  const int w = sw - 2 * margin;
-  const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
-  const int smallH = renderer.getLineHeight(UI_10_FONT_ID);
-
-  // Measure body text (wrapped, max 6 lines)
-  auto bodyLines = renderer.wrappedText(UI_10_FONT_ID, body, w - 2 * pad, 6);
-  const int bodyH = (int)bodyLines.size() * smallH;
-
-  // Total height: pad + title + sep + body + sep + button row + pad
-  constexpr int sepH = 1;
-  constexpr int btnH = 40;
-  const int h = pad + lineH + pad / 2 + sepH + pad / 2 + bodyH + pad / 2 + sepH + btnH + pad / 2;
-  const int x = margin;
-  const int y = (sh - h) / 2;
-
-  // White fill + 1px border, radius 12
-  renderer.fillRoundedRect(x, y, w, h, kCardRadius, Color::White);
-  renderer.drawRoundedRect(x, y, w, h, 1, kCardRadius, true);
-
-  int cy = y + pad;
-
-  // Title bold
-  renderer.drawText(UI_12_FONT_ID, x + pad, cy, title, true, EpdFontFamily::BOLD);
-  cy += lineH + pad / 2;
-
-  // Separator
-  renderer.drawLine(x + pad, cy, x + w - pad, cy);
-  cy += sepH + pad / 2;
-
-  // Body text
-  for (const auto& line : bodyLines) {
-    renderer.drawText(UI_10_FONT_ID, x + pad, cy, line.c_str(), true);
-    cy += smallH;
-  }
-  cy += pad / 2;
-
-  // Separator
-  renderer.drawLine(x + pad, cy, x + w - pad, cy);
-  cy += sepH;
-
-  // Two buttons: Cancel (left) | Confirm (right)
-  const int btnW = (w - 2 * pad) / 2;
-  const int btnX1 = x + pad;
-  const int btnX2 = x + pad + btnW;
-  const int btnY = cy;
-
-  // Vertical divider between buttons
-  renderer.drawLine(btnX2, btnY, btnX2, btnY + btnH);
-
-  // Cancel button (filled when selected)
-  if (!confirmSelected) {
-    renderer.fillRect(btnX1, btnY, btnW, btnH, true);
-  }
-  const int cancelW = renderer.getTextWidth(UI_10_FONT_ID, cancelLabel);
-  renderer.drawText(UI_10_FONT_ID, btnX1 + (btnW - cancelW) / 2,
-                    btnY + (btnH - smallH) / 2, cancelLabel, confirmSelected);
-
-  // Confirm button (filled when selected)
-  if (confirmSelected) {
-    renderer.fillRect(btnX2, btnY, btnW, btnH, true);
-  }
-  const int confirmW = renderer.getTextWidth(UI_10_FONT_ID, confirmLabel);
-  renderer.drawText(UI_10_FONT_ID, btnX2 + (btnW - confirmW) / 2,
-                    btnY + (btnH - smallH) / 2, confirmLabel, !confirmSelected);
-
-  renderer.displayBuffer();
 }
 
 // ── Keyboard key — LightGray selection ───────────────────────────────────────

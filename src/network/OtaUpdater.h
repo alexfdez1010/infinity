@@ -29,7 +29,6 @@ class OtaUpdater {
     UPDATE_IN_PROGRESS,
   };
 
-  size_t getOtaSize() const { return otaSize; }
   size_t getProcessedSize() const { return processedSize; }
   size_t getTotalSize() const { return totalSize; }
   bool getRender() const { return render; }
@@ -40,7 +39,6 @@ class OtaUpdater {
   bool isUpdateNewer() const;
   const std::string& getLatestVersion() const;
   OtaUpdaterError checkForUpdate();
-  OtaUpdaterError installUpdate();  // synchronous convenience wrapper (legacy)
 
   // Non-blocking OTA: call beginInstallUpdate() once, then performInstallUpdateStep()
   // each render tick. Returns UPDATE_IN_PROGRESS while ongoing, OK on success.
