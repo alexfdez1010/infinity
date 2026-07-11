@@ -1,6 +1,6 @@
 # ∞ Infinity
 
-**Spanish (Spain) firmware for the Xteink X4 and X3 e-ink readers.**
+**Firmware for the Xteink X4 and X3 e-ink readers.**
 
 Infinity stands on the shoulders of two open-source projects: the [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) firmware, which provides the EPUB reading engine and the foundation of the system, and [CrossPet](https://github.com/trilwu/crosspet), the adaptation that Infinity takes over from. From here on, everything you read is Infinity.
 
@@ -18,7 +18,7 @@ And when you close the book, the device doesn't go quiet: a collection of carefu
 
 ## 📖 Reading experience
 
-Everything you expect from a good reader, polished and in Castilian Spanish:
+Everything you expect from a good reader, polished:
 
 - 📚 **EPUB 2/3** with images, CSS styles, and multilingual hyphenation
 - ⚡ **XTC** (pre-rendered format, supports books larger than 2 GB) and **TXT / Markdown**
