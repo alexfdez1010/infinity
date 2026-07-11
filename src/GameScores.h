@@ -11,6 +11,8 @@ class GameScores {
   uint32_t bestApagon = 0;  // Apagón fewest moves to solve (0 = no record yet)
   uint32_t bestSlide = 0;   // Sliding puzzle fewest moves to solve (0 = no record yet)
   uint32_t bestPeg = 0;     // Senku fewest pegs left (1 = perfect, 0 = no record yet)
+  uint32_t bestMaze[3] = {0, 0, 0};    // Maze fewest steps per difficulty (0 = no record yet)
+  uint32_t bestBlocks[3] = {0, 0, 0};  // Desatasco fewest moves per difficulty (0 = no record yet)
 
   static GameScores& getInstance() { return instance; }
 
