@@ -1,6 +1,8 @@
 # ∞ Infinity
 
-**Firmware for the Xteink X4 and X3 e-ink readers.**
+**Firmware for the [Xteink X4 and X3](https://www.xteink.com/es/products/xteink-%28x3/x4%29) e-ink readers.**
+
+> 🛒 **Get the hardware:** Infinity runs on the **[Xteink X3 / X4](https://www.xteink.com/es/products/xteink-%28x3/x4%29)** — buy the reader that runs this firmware.
 
 Infinity stands on the shoulders of two open-source projects: the [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) firmware, which provides the EPUB reading engine and the foundation of the system, and [CrossPet](https://github.com/trilwu/crosspet), the adaptation that Infinity takes over from. From here on, everything you read is Infinity.
 
@@ -72,11 +74,19 @@ Along the way we had to tame a serious hang: bringing up WiFi from a low-priorit
 
 ---
 
+## 🛒 Get the hardware
+
+Infinity is firmware — you need the reader it runs on. Both models are supported:
+
+- **[Xteink X3 / X4 — buy here](https://www.xteink.com/es/products/xteink-%28x3/x4%29)**
+
+---
+
 ## 💾 Installation
 
 ### Web flasher (recommended)
 
-1. Connect your X3/X4 via USB-C and turn it on
+1. Connect your [X3 / X4](https://www.xteink.com/es/products/xteink-%28x3/x4%29) via USB-C and turn it on
 2. Go to https://xteink.dve.al/ and flash from your browser
 
 ### Manual
