@@ -62,8 +62,18 @@
   }
   .statusbar a { color: inherit; text-decoration: none; }
   .statusbar a:hover, .statusbar a:focus-visible { background: var(--paper); color: var(--ink); }
-  .statusbar .right { display: flex; gap: 16px; white-space: nowrap; }
+  .statusbar .right { display: flex; align-items: center; gap: 16px; white-space: nowrap; }
   @media (max-width: 560px) { .statusbar .hide-s { display: none; } }
+
+  /* ---- language selector ---- */
+  .langsel { display: inline-flex; border: 1px solid var(--paper); }
+  .langsel button {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    background: transparent; color: var(--paper); border: none; padding: 2px 8px; cursor: pointer;
+  }
+  .langsel button + button { border-left: 1px solid var(--paper); }
+  .langsel button[aria-pressed="true"] { background: var(--paper); color: var(--ink); }
+  .langsel button:hover, .langsel button:focus-visible { background: var(--paper); color: var(--ink); }
 
   /* ---- hero ---- */
   .hero { border-bottom: var(--rule); }
@@ -207,25 +217,28 @@
 <div class="statusbar" role="banner">
   <span>Infinity v1.8.4</span>
   <span class="right">
-    <a href="https://www.xteink.com/es/products/xteink-x4" class="hide-s">buy X4</a>
-    <a href="https://www.xteink.com/es/products/xteink-x3" class="hide-s">buy X3</a>
+    <a href="https://www.xteink.com/es/products/xteink-x4" class="hide-s" data-i18n="nav.buyX4short">buy X4</a>
+    <a href="https://www.xteink.com/es/products/xteink-x3" class="hide-s" data-i18n="nav.buyX3short">buy X3</a>
     <a href="https://github.com/alexfdez1010/Infinity" class="hide-s">github</a>
     <span aria-hidden="true">~09:00</span>
-    <span aria-hidden="true">▮▮▮▯</span>
+    <span class="langsel" role="group" aria-label="Language / Idioma">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="es" aria-pressed="false">ES</button>
+    </span>
   </span>
 </div>
 
 <header class="hero flash">
   <div class="wrap">
     <h1><span class="glyph" aria-hidden="true">∞</span> Infin&shy;ity</h1>
-    <p class="tag">Firmware for the Xteink X4 and X3 e-ink readers. Most firmwares let you read. <strong>Infinity won't let you stop.</strong></p>
+    <p class="tag" data-i18n="hero.tag">Firmware for the Xteink X4 and X3 e-ink readers. Most firmwares let you read. <strong>Infinity won't let you stop.</strong></p>
   </div>
   <nav class="cta-row" aria-label="Primary">
-    <a class="cta primary" href="https://www.xteink.com/es/products/xteink-x4">Buy the X4 →</a>
-    <a class="cta primary" href="https://www.xteink.com/es/products/xteink-x3">Buy the X3 →</a>
-    <a class="cta" href="https://xteink.dve.al/">Flash from browser</a>
-    <a class="cta" href="https://github.com/alexfdez1010/Infinity">Source on GitHub</a>
-    <a class="cta" href="#install">Install manually</a>
+    <a class="cta primary" href="https://www.xteink.com/es/products/xteink-x4" data-i18n="cta.buyX4">Buy the X4 →</a>
+    <a class="cta primary" href="https://www.xteink.com/es/products/xteink-x3" data-i18n="cta.buyX3">Buy the X3 →</a>
+    <a class="cta" href="https://xteink.dve.al/" data-i18n="cta.flash">Flash from browser</a>
+    <a class="cta" href="https://github.com/alexfdez1010/Infinity" data-i18n="cta.source">Source on GitHub</a>
+    <a class="cta" href="#install" data-i18n="cta.install">Install manually</a>
   </nav>
 </header>
 
@@ -233,76 +246,76 @@
   <span>ESP32-C3 RISC-V</span>
   <span>160 MHz</span>
   <span>380 KB RAM</span>
-  <span>No PSRAM</span>
+  <span data-i18n="spec.nopsram">No PSRAM</span>
   <span>16 MB flash</span>
-  <span>800 × 480 e-ink</span>
-  <span>MIT license</span>
+  <span data-i18n="spec.eink">800 × 480 e-ink</span>
+  <span data-i18n="spec.mit">MIT license</span>
 </div>
 
 <section id="hook">
   <div class="wrap">
-    <span class="eyebrow">Hook</span>
-    <h2>Reading, treated like a habit</h2>
-    <p class="lede">Habits are built through reinforcement, so Infinity adds a gamification layer designed to keep you coming back. All of it is optional and can be switched off — but it's hard to give up once you start.</p>
+    <span class="eyebrow" data-i18n="hook.eyebrow">Hook</span>
+    <h2 data-i18n="hook.h2">Reading, treated like a habit</h2>
+    <p class="lede" data-i18n="hook.lede">Habits are built through reinforcement, so Infinity adds a gamification layer designed to keep you coming back. All of it is optional and can be switched off — but it's hard to give up once you start.</p>
     <div class="grid">
-      <div class="cell"><h3>Daily goal</h3><p>You set the minutes; Infinity nudges you to hit them, every day.</p></div>
-      <div class="cell"><h3>Streak + freeze tokens</h3><p>A reading-day streak you'll hate to break — with tokens that forgive an off day.</p></div>
-      <div class="cell"><h3>Surprise rewards</h3><p>Sometimes hitting your goal gifts you a token, sometimes not. Variable-ratio reinforcement: exactly what hooks you.</p></div>
-      <div class="cell"><h3>Daily quests</h3><p>Rotating challenges that change every day.</p></div>
-      <div class="cell"><h3>Achievements</h3><p>Badges unlocked by reading milestones.</p></div>
-      <div class="cell"><h3>Records &amp; history</h3><p>Personal records and a weekly log, to see how far you've come.</p></div>
+      <div class="cell"><h3 data-i18n="hook.c1.h">Daily goal</h3><p data-i18n="hook.c1.p">You set the minutes; Infinity nudges you to hit them, every day.</p></div>
+      <div class="cell"><h3 data-i18n="hook.c2.h">Streak + freeze tokens</h3><p data-i18n="hook.c2.p">A reading-day streak you'll hate to break — with tokens that forgive an off day.</p></div>
+      <div class="cell"><h3 data-i18n="hook.c3.h">Surprise rewards</h3><p data-i18n="hook.c3.p">Sometimes hitting your goal gifts you a token, sometimes not. Variable-ratio reinforcement: exactly what hooks you.</p></div>
+      <div class="cell"><h3 data-i18n="hook.c4.h">Daily quests</h3><p data-i18n="hook.c4.p">Rotating challenges that change every day.</p></div>
+      <div class="cell"><h3 data-i18n="hook.c5.h">Achievements</h3><p data-i18n="hook.c5.p">Badges unlocked by reading milestones.</p></div>
+      <div class="cell"><h3 data-i18n="hook.c6.h">Records &amp; history</h3><p data-i18n="hook.c6.p">Personal records and a weekly log, to see how far you've come.</p></div>
     </div>
   </div>
 </section>
 
 <section id="read">
   <div class="wrap">
-    <span class="eyebrow">Read</span>
-    <h2>Everything a reader should do, polished</h2>
+    <span class="eyebrow" data-i18n="read.eyebrow">Read</span>
+    <h2 data-i18n="read.h2">Everything a reader should do, polished</h2>
     <div class="grid">
-      <div class="cell"><h3>EPUB 2 / 3</h3><p>Images, CSS styles, and multilingual hyphenation.</p></div>
-      <div class="cell"><h3>XTC · TXT · Markdown</h3><p>Pre-rendered XTC supports books larger than 2 GB.</p></div>
-      <div class="cell"><h3>Fonts</h3><p>Bookerly, Lexend and Bokerlam built in, plus custom fonts from the SD card. Dual-font model for mixed scripts.</p></div>
-      <div class="cell"><h3>Instant page turns</h3><p>Font cache plus silent pre-indexing of the next chapter. Four sizes with smoothed grayscale rendering.</p></div>
-      <div class="cell"><h3>KOReader sync</h3><p>Continue your progress across devices.</p></div>
-      <div class="cell"><h3>Focus mode</h3><p>Hides every extra: just you and your books.</p></div>
-      <div class="cell"><h3>Your layout</h3><p>Dark mode, five themes, a fully configurable status bar, four orientations with remappable buttons.</p></div>
-      <div class="cell"><h3>Bookmarks &amp; stats</h3><p>Long-press to bookmark; reading stats feed the streaks. Nine power-button actions via single, double or triple press.</p></div>
+      <div class="cell"><h3 data-i18n="read.c1.h">EPUB 2 / 3</h3><p data-i18n="read.c1.p">Images, CSS styles, and multilingual hyphenation.</p></div>
+      <div class="cell"><h3 data-i18n="read.c2.h">XTC · TXT · Markdown</h3><p data-i18n="read.c2.p">Pre-rendered XTC supports books larger than 2 GB.</p></div>
+      <div class="cell"><h3 data-i18n="read.c3.h">Fonts</h3><p data-i18n="read.c3.p">Bookerly, Lexend and Bokerlam built in, plus custom fonts from the SD card. Dual-font model for mixed scripts.</p></div>
+      <div class="cell"><h3 data-i18n="read.c4.h">Instant page turns</h3><p data-i18n="read.c4.p">Font cache plus silent pre-indexing of the next chapter. Four sizes with smoothed grayscale rendering.</p></div>
+      <div class="cell"><h3 data-i18n="read.c5.h">KOReader sync</h3><p data-i18n="read.c5.p">Continue your progress across devices.</p></div>
+      <div class="cell"><h3 data-i18n="read.c6.h">Focus mode</h3><p data-i18n="read.c6.p">Hides every extra: just you and your books.</p></div>
+      <div class="cell"><h3 data-i18n="read.c7.h">Your layout</h3><p data-i18n="read.c7.p">Dark mode, five themes, a fully configurable status bar, four orientations with remappable buttons.</p></div>
+      <div class="cell"><h3 data-i18n="read.c8.h">Bookmarks &amp; stats</h3><p data-i18n="read.c8.p">Long-press to bookmark; reading stats feed the streaks. Nine power-button actions via single, double or triple press.</p></div>
     </div>
   </div>
 </section>
 
 <section id="play">
   <div class="wrap">
-    <span class="eyebrow">Play</span>
-    <h2>Six games, zero touchscreen</h2>
-    <p class="lede">Not a junk drawer: each game was chosen because it controls well with a D-pad and a handful of buttons. Each keeps its own high score.</p>
+    <span class="eyebrow" data-i18n="play.eyebrow">Play</span>
+    <h2 data-i18n="play.h2">Six games, zero touchscreen</h2>
+    <p class="lede" data-i18n="play.lede">Not a junk drawer: each game was chosen because it controls well with a D-pad and a handful of buttons. Each keeps its own high score.</p>
     <dl class="games">
-      <div class="game"><dt>2048</dt><dd>Slide and merge equal tiles until you reach 2048.</dd></div>
-      <div class="game"><dt>Sliding puzzle</dt><dd>Push numbered tiles through the empty gap until they're in order.</dd></div>
-      <div class="game"><dt>Lights Out</dt><dd>Pressing a cell flips it and its neighbours. Turn everything off in the fewest moves.</dd></div>
-      <div class="game"><dt>Peg solitaire</dt><dd>Jump pegs to remove them. A perfect game leaves exactly one on the board.</dd></div>
-      <div class="game"><dt>Maze</dt><dd>Find the exit through generated mazes, counting your steps.</dd></div>
-      <div class="game"><dt>Rush Hour</dt><dd>Slide the blockers out of the way to free the stuck car.</dd></div>
+      <div class="game"><dt data-i18n="play.g1.t">2048</dt><dd data-i18n="play.g1.d">Slide and merge equal tiles until you reach 2048.</dd></div>
+      <div class="game"><dt data-i18n="play.g2.t">Sliding puzzle</dt><dd data-i18n="play.g2.d">Push numbered tiles through the empty gap until they're in order.</dd></div>
+      <div class="game"><dt data-i18n="play.g3.t">Lights Out</dt><dd data-i18n="play.g3.d">Pressing a cell flips it and its neighbours. Turn everything off in the fewest moves.</dd></div>
+      <div class="game"><dt data-i18n="play.g4.t">Peg solitaire</dt><dd data-i18n="play.g4.d">Jump pegs to remove them. A perfect game leaves exactly one on the board.</dd></div>
+      <div class="game"><dt data-i18n="play.g5.t">Maze</dt><dd data-i18n="play.g5.d">Find the exit through generated mazes, counting your steps.</dd></div>
+      <div class="game"><dt data-i18n="play.g6.t">Rush Hour</dt><dd data-i18n="play.g6.d">Slide the blockers out of the way to free the stuck car.</dd></div>
     </dl>
   </div>
 </section>
 
 <section id="sync">
   <div class="wrap">
-    <span class="eyebrow">Sync</span>
-    <h2>A clock with no clock</h2>
-    <p class="lede">The Xteink X4 has no battery-backed RTC. This is the kind of problem Infinity sweats over — and a fair sample of how the firmware is built under the hood.</p>
+    <span class="eyebrow" data-i18n="sync.eyebrow">Sync</span>
+    <h2 data-i18n="sync.h2">A clock with no clock</h2>
+    <p class="lede" data-i18n="sync.lede">The Xteink X4 has no battery-backed RTC. This is the kind of problem Infinity sweats over — and a fair sample of how the firmware is built under the hood.</p>
     <div class="duel">
       <div class="problem">
-        <h3>The problem</h3>
-        <p>On wake from deep sleep, time is restored from an imprecise internal oscillator that keeps accumulating drift. The device could show 23:55 when it was really 09:00.</p>
-        <p>Worse: bringing WiFi up from a low-priority task with little free memory froze the whole device.</p>
+        <h3 data-i18n="sync.problem.h">The problem</h3>
+        <p data-i18n="sync.problem.p1">On wake from deep sleep, time is restored from an imprecise internal oscillator that keeps accumulating drift. The device could show 23:55 when it was really 09:00.</p>
+        <p data-i18n="sync.problem.p2">Worse: bringing WiFi up from a low-priority task with little free memory froze the whole device.</p>
       </div>
       <div class="fix">
-        <h3>The fix</h3>
-        <p>Infinity resyncs opportunistically. When the clock is approximate, it connects in the background to a saved WiFi network, sets the time via NTP, and switches the radio off. A discreet <span class="tilde">~</span> in the status bar marks the time as approximate until sync completes — you saw it at the top of this page.</p>
-        <p>The radio now always starts from the main task, through a state machine that advances one small step per cycle, so the interface never blocks. Timezones with DST rules are built in.</p>
+        <h3 data-i18n="sync.fix.h">The fix</h3>
+        <p data-i18n="sync.fix.p1">Infinity resyncs opportunistically. When the clock is approximate, it connects in the background to a saved WiFi network, sets the time via NTP, and switches the radio off. A discreet <span class="tilde">~</span> in the status bar marks the time as approximate until sync completes — you saw it at the top of this page.</p>
+        <p data-i18n="sync.fix.p2">The radio now always starts from the main task, through a state machine that advances one small step per cycle, so the interface never blocks. Timezones with DST rules are built in.</p>
       </div>
     </div>
   </div>
@@ -310,43 +323,179 @@
 
 <section id="install">
   <div class="wrap">
-    <span class="eyebrow">Flash</span>
-    <h2>Install in one minute</h2>
+    <span class="eyebrow" data-i18n="install.eyebrow">Flash</span>
+    <h2 data-i18n="install.h2">Install in one minute</h2>
     <ol class="steps">
-      <li>Connect your X3 / X4 via USB-C and turn it on.</li>
-      <li>Open <a href="https://xteink.dve.al/">xteink.dve.al</a> and flash straight from the browser.</li>
+      <li data-i18n="install.step1">Connect your X3 / X4 via USB-C and turn it on.</li>
+      <li data-i18n="install.step2">Open <a href="https://xteink.dve.al/">xteink.dve.al</a> and flash straight from the browser.</li>
     </ol>
-    <p class="lede" style="margin-top:28px">Or build it yourself:</p>
+    <p class="lede" style="margin-top:28px" data-i18n="install.build">Or build it yourself:</p>
     <pre><code>git clone --recursive https://github.com/alexfdez1010/Infinity.git
 cd Infinity
 pio run --target upload</code></pre>
-    <p class="lede">Custom fonts: convert any <code>.ttf</code> / <code>.otf</code> at <a href="https://xteink.lakafior.com/">xteink.lakafior.com</a>, drop the <code>.bin</code> into <code>/fonts/</code> on the SD card, restart.</p>
+    <p class="lede" data-i18n="install.fonts">Custom fonts: convert any <code>.ttf</code> / <code>.otf</code> at <a href="https://xteink.lakafior.com/">xteink.lakafior.com</a>, drop the <code>.bin</code> into <code>/fonts/</code> on the SD card, restart.</p>
   </div>
 </section>
 
 <section id="build">
   <div class="wrap">
-    <span class="eyebrow">Build</span>
-    <h2>380 KB of RAM, every byte counts</h2>
-    <p class="lede">PlatformIO, Arduino framework, C++17. The architecture follows an Android-style activity model: each screen is an <code>Activity</code> pushed onto a manager that owns the lifecycle and a single render thread. TLS buffers are trimmed to 4&nbsp;KB so WiFi and encryption fit in the free heap.</p>
-    <pre><code>pio run -e default   <span class="comment"># standard build, serial log</span>
+    <span class="eyebrow" data-i18n="build.eyebrow">Build</span>
+    <h2 data-i18n="build.h2">380 KB of RAM, every byte counts</h2>
+    <p class="lede" data-i18n="build.lede">PlatformIO, Arduino framework, C++17. The architecture follows an Android-style activity model: each screen is an <code>Activity</code> pushed onto a manager that owns the lifecycle and a single render thread. TLS buffers are trimmed to 4&nbsp;KB so WiFi and encryption fit in the free heap.</p>
+    <pre><code data-i18n="build.code">pio run -e default   <span class="comment"># standard build, serial log</span>
 pio run -e slim      <span class="comment"># release build, smaller</span>
 pio run -e ble       <span class="comment"># bluetooth build (beta)</span>
 pio run -t upload    <span class="comment"># flash via USB</span></code></pre>
-    <p class="lineage">Contributing is the usual dance: fork → branch → pull request. Every visible string is translated (English and Castilian Spanish). Infinity stands on <a href="https://github.com/crosspoint-reader/crosspoint-reader">CrossPoint Reader</a>, which provides the EPUB engine and system foundation, and <a href="https://github.com/trilwu/crosspet">CrossPet</a>, the adaptation it takes over from.</p>
+    <p class="lineage" data-i18n="build.lineage">Contributing is the usual dance: fork → branch → pull request. Every visible string is translated (English and Castilian Spanish). Infinity stands on <a href="https://github.com/crosspoint-reader/crosspoint-reader">CrossPoint Reader</a>, which provides the EPUB engine and system foundation, and <a href="https://github.com/trilwu/crosspet">CrossPet</a>, the adaptation it takes over from.</p>
   </div>
 </section>
 
 <footer>
   <div class="bar">
-    <span>∞ Infinity — MIT license</span>
-    <span>Not affiliated with Xteink</span>
-    <a href="https://www.xteink.com/es/products/xteink-x4">Buy the X4</a>
-    <a href="https://www.xteink.com/es/products/xteink-x3">Buy the X3</a>
+    <span data-i18n="footer.mit">∞ Infinity — MIT license</span>
+    <span data-i18n="footer.noaffil">Not affiliated with Xteink</span>
+    <a href="https://www.xteink.com/es/products/xteink-x4" data-i18n="footer.buyX4">Buy the X4</a>
+    <a href="https://www.xteink.com/es/products/xteink-x3" data-i18n="footer.buyX3">Buy the X3</a>
     <a href="https://github.com/alexfdez1010/Infinity">github.com/alexfdez1010/Infinity</a>
   </div>
   <div class="dither-band dither" aria-hidden="true"></div>
 </footer>
+
+<script>
+(function () {
+  var T = {
+    "title": {
+      en: "Infinity — firmware for Xteink e-ink readers",
+      es: "Infinity — firmware para lectores de tinta electrónica Xteink"
+    },
+    "desc": {
+      en: "Infinity is open-source firmware for the Xteink X4 and X3 e-ink readers. A polished EPUB engine plus a gamification layer designed so you can't stop reading.",
+      es: "Infinity es firmware de código abierto para los lectores de tinta electrónica Xteink X4 y X3. Un motor EPUB pulido y una capa de gamificación diseñada para que no puedas parar de leer."
+    },
+    "nav.buyX4short": { en: "buy X4", es: "comprar X4" },
+    "nav.buyX3short": { en: "buy X3", es: "comprar X3" },
+    "hero.tag": {
+      en: "Firmware for the Xteink X4 and X3 e-ink readers. Most firmwares let you read. <strong>Infinity won't let you stop.</strong>",
+      es: "Firmware para los lectores de tinta electrónica Xteink X4 y X3. La mayoría de los firmwares te dejan leer. <strong>Infinity no te dejará parar.</strong>"
+    },
+    "cta.buyX4": { en: "Buy the X4 →", es: "Comprar el X4 →" },
+    "cta.buyX3": { en: "Buy the X3 →", es: "Comprar el X3 →" },
+    "cta.flash": { en: "Flash from browser", es: "Instalar desde el navegador" },
+    "cta.source": { en: "Source on GitHub", es: "Código en GitHub" },
+    "cta.install": { en: "Install manually", es: "Instalación manual" },
+    "spec.nopsram": { en: "No PSRAM", es: "Sin PSRAM" },
+    "spec.eink": { en: "800 × 480 e-ink", es: "Tinta-e 800 × 480" },
+    "spec.mit": { en: "MIT license", es: "Licencia MIT" },
+    "hook.eyebrow": { en: "Hook", es: "Enganche" },
+    "hook.h2": { en: "Reading, treated like a habit", es: "La lectura, tratada como un hábito" },
+    "hook.lede": {
+      en: "Habits are built through reinforcement, so Infinity adds a gamification layer designed to keep you coming back. All of it is optional and can be switched off — but it's hard to give up once you start.",
+      es: "Los hábitos se construyen mediante refuerzo, así que Infinity añade una capa de gamificación diseñada para que vuelvas. Todo es opcional y se puede desactivar, pero cuesta dejarlo una vez empiezas."
+    },
+    "hook.c1.h": { en: "Daily goal", es: "Meta diaria" },
+    "hook.c1.p": { en: "You set the minutes; Infinity nudges you to hit them, every day.", es: "Tú fijas los minutos; Infinity te empuja a cumplirlos, cada día." },
+    "hook.c2.h": { en: "Streak + freeze tokens", es: "Racha + fichas de congelación" },
+    "hook.c2.p": { en: "A reading-day streak you'll hate to break — with tokens that forgive an off day.", es: "Una racha de días de lectura que odiarás romper, con fichas que perdonan un día en blanco." },
+    "hook.c3.h": { en: "Surprise rewards", es: "Recompensas sorpresa" },
+    "hook.c3.p": { en: "Sometimes hitting your goal gifts you a token, sometimes not. Variable-ratio reinforcement: exactly what hooks you.", es: "A veces cumplir tu meta te regala una ficha, a veces no. Refuerzo de ratio variable: justo lo que engancha." },
+    "hook.c4.h": { en: "Daily quests", es: "Misiones diarias" },
+    "hook.c4.p": { en: "Rotating challenges that change every day.", es: "Retos rotativos que cambian cada día." },
+    "hook.c5.h": { en: "Achievements", es: "Logros" },
+    "hook.c5.p": { en: "Badges unlocked by reading milestones.", es: "Insignias que se desbloquean con hitos de lectura." },
+    "hook.c6.h": { en: "Records &amp; history", es: "Récords e historial" },
+    "hook.c6.p": { en: "Personal records and a weekly log, to see how far you've come.", es: "Récords personales y un registro semanal, para ver cuánto has avanzado." },
+    "read.eyebrow": { en: "Read", es: "Leer" },
+    "read.h2": { en: "Everything a reader should do, polished", es: "Todo lo que un lector debe hacer, pulido" },
+    "read.c1.h": { en: "EPUB 2 / 3", es: "EPUB 2 / 3" },
+    "read.c1.p": { en: "Images, CSS styles, and multilingual hyphenation.", es: "Imágenes, estilos CSS y separación silábica multilingüe." },
+    "read.c2.h": { en: "XTC · TXT · Markdown", es: "XTC · TXT · Markdown" },
+    "read.c2.p": { en: "Pre-rendered XTC supports books larger than 2 GB.", es: "El formato XTC pre-renderizado admite libros de más de 2 GB." },
+    "read.c3.h": { en: "Fonts", es: "Tipografías" },
+    "read.c3.p": { en: "Bookerly, Lexend and Bokerlam built in, plus custom fonts from the SD card. Dual-font model for mixed scripts.", es: "Bookerly, Lexend y Bokerlam incluidas, más tipografías propias desde la tarjeta SD. Modelo de doble fuente para textos con varios alfabetos." },
+    "read.c4.h": { en: "Instant page turns", es: "Paso de página instantáneo" },
+    "read.c4.p": { en: "Font cache plus silent pre-indexing of the next chapter. Four sizes with smoothed grayscale rendering.", es: "Caché de fuentes y preindexado silencioso del siguiente capítulo. Cuatro tamaños con renderizado en escala de grises suavizado." },
+    "read.c5.h": { en: "KOReader sync", es: "Sincronización con KOReader" },
+    "read.c5.p": { en: "Continue your progress across devices.", es: "Continúa tu progreso entre dispositivos." },
+    "read.c6.h": { en: "Focus mode", es: "Modo concentración" },
+    "read.c6.p": { en: "Hides every extra: just you and your books.", es: "Oculta todo lo accesorio: solo tú y tus libros." },
+    "read.c7.h": { en: "Your layout", es: "A tu manera" },
+    "read.c7.p": { en: "Dark mode, five themes, a fully configurable status bar, four orientations with remappable buttons.", es: "Modo oscuro, cinco temas, una barra de estado totalmente configurable y cuatro orientaciones con botones reasignables." },
+    "read.c8.h": { en: "Bookmarks &amp; stats", es: "Marcadores y estadísticas" },
+    "read.c8.p": { en: "Long-press to bookmark; reading stats feed the streaks. Nine power-button actions via single, double or triple press.", es: "Pulsación larga para marcar; las estadísticas de lectura alimentan las rachas. Nueve acciones del botón de encendido con pulsación simple, doble o triple." },
+    "play.eyebrow": { en: "Play", es: "Jugar" },
+    "play.h2": { en: "Six games, zero touchscreen", es: "Seis juegos, cero pantalla táctil" },
+    "play.lede": { en: "Not a junk drawer: each game was chosen because it controls well with a D-pad and a handful of buttons. Each keeps its own high score.", es: "No es un cajón de sastre: cada juego se eligió porque se controla bien con una cruceta y unos pocos botones. Cada uno guarda su propia puntuación máxima." },
+    "play.g1.t": { en: "2048", es: "2048" },
+    "play.g1.d": { en: "Slide and merge equal tiles until you reach 2048.", es: "Desliza y combina fichas iguales hasta llegar a 2048." },
+    "play.g2.t": { en: "Sliding puzzle", es: "Puzle deslizante" },
+    "play.g2.d": { en: "Push numbered tiles through the empty gap until they're in order.", es: "Empuja las fichas numeradas por el hueco vacío hasta ordenarlas." },
+    "play.g3.t": { en: "Lights Out", es: "Apagón" },
+    "play.g3.d": { en: "Pressing a cell flips it and its neighbours. Turn everything off in the fewest moves.", es: "Al pulsar una celda cambia ella y sus vecinas. Apágalo todo en los menos movimientos posibles." },
+    "play.g4.t": { en: "Peg solitaire", es: "Senku" },
+    "play.g4.d": { en: "Jump pegs to remove them. A perfect game leaves exactly one on the board.", es: "Salta fichas para eliminarlas. Una partida perfecta deja una sola en el tablero." },
+    "play.g5.t": { en: "Maze", es: "Laberinto" },
+    "play.g5.d": { en: "Find the exit through generated mazes, counting your steps.", es: "Encuentra la salida en laberintos generados, contando tus pasos." },
+    "play.g6.t": { en: "Rush Hour", es: "Desatasco" },
+    "play.g6.d": { en: "Slide the blockers out of the way to free the stuck car.", es: "Desliza las piezas que estorban para liberar el coche atascado." },
+    "sync.eyebrow": { en: "Sync", es: "Sincronizar" },
+    "sync.h2": { en: "A clock with no clock", es: "Un reloj sin reloj" },
+    "sync.lede": { en: "The Xteink X4 has no battery-backed RTC. This is the kind of problem Infinity sweats over — and a fair sample of how the firmware is built under the hood.", es: "El Xteink X4 no tiene un RTC con batería. Este es el tipo de problema que Infinity se curra a fondo, y una buena muestra de cómo está construido el firmware por dentro." },
+    "sync.problem.h": { en: "The problem", es: "El problema" },
+    "sync.problem.p1": { en: "On wake from deep sleep, time is restored from an imprecise internal oscillator that keeps accumulating drift. The device could show 23:55 when it was really 09:00.", es: "Al despertar del sueño profundo, la hora se restaura desde un oscilador interno impreciso que acumula desfase. El dispositivo podía marcar las 23:55 cuando en realidad eran las 09:00." },
+    "sync.problem.p2": { en: "Worse: bringing WiFi up from a low-priority task with little free memory froze the whole device.", es: "Peor aún: levantar el WiFi desde una tarea de baja prioridad con poca memoria libre congelaba todo el dispositivo." },
+    "sync.fix.h": { en: "The fix", es: "La solución" },
+    "sync.fix.p1": { en: "Infinity resyncs opportunistically. When the clock is approximate, it connects in the background to a saved WiFi network, sets the time via NTP, and switches the radio off. A discreet <span class='tilde'>~</span> in the status bar marks the time as approximate until sync completes — you saw it at the top of this page.", es: "Infinity resincroniza de forma oportunista. Cuando el reloj es aproximado, se conecta en segundo plano a una red WiFi guardada, ajusta la hora por NTP y apaga la radio. Una discreta <span class='tilde'>~</span> en la barra de estado marca la hora como aproximada hasta que termina la sincronización; la has visto arriba en esta página." },
+    "sync.fix.p2": { en: "The radio now always starts from the main task, through a state machine that advances one small step per cycle, so the interface never blocks. Timezones with DST rules are built in.", es: "La radio ahora siempre arranca desde la tarea principal, mediante una máquina de estados que avanza un pequeño paso por ciclo, de modo que la interfaz nunca se bloquea. Incluye zonas horarias con reglas de horario de verano." },
+    "install.eyebrow": { en: "Flash", es: "Instalar" },
+    "install.h2": { en: "Install in one minute", es: "Instala en un minuto" },
+    "install.step1": { en: "Connect your X3 / X4 via USB-C and turn it on.", es: "Conecta tu X3 / X4 por USB-C y enciéndelo." },
+    "install.step2": { en: "Open <a href='https://xteink.dve.al/'>xteink.dve.al</a> and flash straight from the browser.", es: "Abre <a href='https://xteink.dve.al/'>xteink.dve.al</a> e instala directamente desde el navegador." },
+    "install.build": { en: "Or build it yourself:", es: "O compílalo tú mismo:" },
+    "install.fonts": { en: "Custom fonts: convert any <code>.ttf</code> / <code>.otf</code> at <a href='https://xteink.lakafior.com/'>xteink.lakafior.com</a>, drop the <code>.bin</code> into <code>/fonts/</code> on the SD card, restart.", es: "Tipografías propias: convierte cualquier <code>.ttf</code> / <code>.otf</code> en <a href='https://xteink.lakafior.com/'>xteink.lakafior.com</a>, copia el <code>.bin</code> en <code>/fonts/</code> de la tarjeta SD y reinicia." },
+    "build.eyebrow": { en: "Build", es: "Compilar" },
+    "build.h2": { en: "380 KB of RAM, every byte counts", es: "380 KB de RAM, cada byte cuenta" },
+    "build.lede": { en: "PlatformIO, Arduino framework, C++17. The architecture follows an Android-style activity model: each screen is an <code>Activity</code> pushed onto a manager that owns the lifecycle and a single render thread. TLS buffers are trimmed to 4&nbsp;KB so WiFi and encryption fit in the free heap.", es: "PlatformIO, framework de Arduino, C++17. La arquitectura sigue un modelo de actividades al estilo Android: cada pantalla es una <code>Activity</code> apilada en un gestor que controla el ciclo de vida y un único hilo de render. Los búferes TLS se recortan a 4&nbsp;KB para que WiFi y el cifrado quepan en el heap libre." },
+    "build.code": {
+      en: "pio run -e default   <span class='comment'># standard build, serial log</span>\npio run -e slim      <span class='comment'># release build, smaller</span>\npio run -e ble       <span class='comment'># bluetooth build (beta)</span>\npio run -t upload    <span class='comment'># flash via USB</span>",
+      es: "pio run -e default   <span class='comment'># compilación estándar, con log serie</span>\npio run -e slim      <span class='comment'># compilación de lanzamiento, más pequeña</span>\npio run -e ble       <span class='comment'># compilación bluetooth (beta)</span>\npio run -t upload    <span class='comment'># flashear por USB</span>"
+    },
+    "build.lineage": { en: "Contributing is the usual dance: fork → branch → pull request. Every visible string is translated (English and Castilian Spanish). Infinity stands on <a href='https://github.com/crosspoint-reader/crosspoint-reader'>CrossPoint Reader</a>, which provides the EPUB engine and system foundation, and <a href='https://github.com/trilwu/crosspet'>CrossPet</a>, the adaptation it takes over from.", es: "Contribuir es el baile de siempre: fork → rama → pull request. Cada texto visible está traducido (inglés y español de España). Infinity se apoya en <a href='https://github.com/crosspoint-reader/crosspoint-reader'>CrossPoint Reader</a>, que aporta el motor EPUB y la base del sistema, y <a href='https://github.com/trilwu/crosspet'>CrossPet</a>, la adaptación de la que parte." },
+    "footer.mit": { en: "∞ Infinity — MIT license", es: "∞ Infinity — Licencia MIT" },
+    "footer.noaffil": { en: "Not affiliated with Xteink", es: "Sin afiliación con Xteink" },
+    "footer.buyX4": { en: "Buy the X4", es: "Comprar el X4" },
+    "footer.buyX3": { en: "Buy the X3", es: "Comprar el X3" }
+  };
+
+  function apply(lang) {
+    if (lang !== "es") lang = "en";
+    document.documentElement.lang = lang;
+    if (T.title[lang]) document.title = T.title[lang];
+    var md = document.querySelector('meta[name="description"]');
+    if (md && T.desc[lang]) md.setAttribute("content", T.desc[lang]);
+    var nodes = document.querySelectorAll("[data-i18n]");
+    for (var i = 0; i < nodes.length; i++) {
+      var k = nodes[i].getAttribute("data-i18n");
+      if (T[k] && T[k][lang] != null) nodes[i].innerHTML = T[k][lang];
+    }
+    var btns = document.querySelectorAll(".langsel button");
+    for (var j = 0; j < btns.length; j++) {
+      btns[j].setAttribute("aria-pressed", String(btns[j].getAttribute("data-lang") === lang));
+    }
+    try { localStorage.setItem("infinity-lang", lang); } catch (e) {}
+  }
+
+  var stored = null;
+  try { stored = localStorage.getItem("infinity-lang"); } catch (e) {}
+  var initial = stored || ((navigator.language || "en").toLowerCase().indexOf("es") === 0 ? "es" : "en");
+
+  var btns = document.querySelectorAll(".langsel button");
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].addEventListener("click", function () { apply(this.getAttribute("data-lang")); });
+  }
+
+  apply(initial);
+})();
+</script>
 
 </body>
 </html>
