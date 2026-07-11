@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infinity — firmware for Xteink e-ink readers</title>
+<meta name="description" content="Infinity is open-source firmware for the Xteink X4 and X3 e-ink readers. A polished EPUB engine plus a gamification layer designed so you can't stop reading.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23111'/%3E%3Ctext x='50' y='72' font-size='64' text-anchor='middle' fill='%23e6e4dc' font-family='Georgia,serif'%3E%E2%88%9E%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --paper: #e6e4dc;
+    --ink: #111111;
+    --rule: 4px solid var(--ink);
+    --hairline: 1px solid var(--ink);
+    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --grot: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --serif: Georgia, "Times New Roman", serif;
+    --pad: clamp(16px, 4vw, 48px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #161616; --ink: #dcdad2; }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    overflow-x: clip;
+    font-family: var(--serif);
+    font-size: clamp(16px, 1.6vw, 19px);
+    line-height: 1.55;
+  }
+
+  ::selection { background: var(--ink); color: var(--paper); }
+
+  a { color: inherit; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 2px; }
+  a:hover, a:focus-visible { background: var(--ink); color: var(--paper); text-decoration: none; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+  .dither {
+    background-image: repeating-conic-gradient(var(--ink) 0% 25%, transparent 0% 50%);
+    background-size: 4px 4px;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 var(--pad); }
+
+  /* ---- status bar ---- */
+  .statusbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--ink); color: var(--paper);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+    display: flex; justify-content: space-between; gap: 16px;
+    padding: 8px var(--pad);
+    text-transform: uppercase;
+  }
+  .statusbar a { color: inherit; text-decoration: none; }
+  .statusbar a:hover, .statusbar a:focus-visible { background: var(--paper); color: var(--ink); }
+  .statusbar .right { display: flex; gap: 16px; white-space: nowrap; }
+  @media (max-width: 560px) { .statusbar .hide-s { display: none; } }
+
+  /* ---- hero ---- */
+  .hero { border-bottom: var(--rule); }
+  .hero .wrap { padding-top: clamp(40px, 8vw, 96px); padding-bottom: 0; }
+  .hero h1 {
+    font-family: var(--grot);
+    font-weight: 900;
+    font-size: clamp(40px, 13vw, 190px);
+    line-height: 0.86;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+    word-break: break-word;
+  }
+  .hero h1 .glyph { font-family: var(--serif); font-weight: 400; letter-spacing: 0; }
+  .hero .tag {
+    max-width: 34ch;
+    font-size: clamp(19px, 2.4vw, 27px);
+    line-height: 1.35;
+    margin: clamp(24px, 4vw, 48px) 0;
+  }
+  .hero .tag strong { font-style: italic; font-weight: inherit; }
+
+  .cta-row { display: flex; flex-wrap: wrap; }
+  .cta {
+    font-family: var(--mono); font-size: clamp(14px, 1.6vw, 18px);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    text-decoration: none;
+    padding: 20px clamp(16px, 3vw, 40px);
+    border-top: var(--rule);
+    border-right: var(--rule);
+    flex-grow: 1; text-align: center;
+  }
+  .cta:last-child { border-right: none; }
+  .cta.primary { background: var(--ink); color: var(--paper); }
+  .cta.primary:hover, .cta.primary:focus-visible { background: var(--paper); color: var(--ink); }
+
+  /* ---- spec strip ---- */
+  .specs {
+    border-bottom: var(--rule);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em;
+    text-transform: uppercase;
+    display: flex; flex-wrap: wrap;
+  }
+  .specs span { padding: 10px 14px; border-right: var(--hairline); flex-grow: 1; text-align: center; }
+  .specs span:last-child { border-right: none; }
+
+  /* ---- sections ---- */
+  section { border-bottom: var(--rule); }
+  section .wrap { padding-top: clamp(40px, 6vw, 72px); padding-bottom: clamp(40px, 6vw, 72px); }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.25em;
+    text-transform: uppercase;
+    display: inline-block;
+    background: var(--ink); color: var(--paper);
+    padding: 4px 10px;
+    margin-bottom: 20px;
+  }
+  h2 {
+    font-family: var(--grot); font-weight: 900;
+    font-size: clamp(30px, 5.4vw, 60px);
+    line-height: 1.0; letter-spacing: -0.02em;
+    text-transform: uppercase;
+    margin-bottom: clamp(20px, 3vw, 36px);
+    max-width: 20ch;
+  }
+  .lede { max-width: 62ch; margin-bottom: 28px; }
+  .lede + .lede { margin-top: -12px; }
+
+  /* ---- feature grid ---- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); border-top: var(--hairline); border-left: var(--hairline); }
+  .cell { border-right: var(--hairline); border-bottom: var(--hairline); padding: 18px; }
+  .cell h3 { font-family: var(--mono); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+  .cell p { font-size: 15px; line-height: 1.45; }
+
+  /* ---- games table ---- */
+  .games { border-top: var(--rule); }
+  .game { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; border-bottom: var(--hairline); }
+  .game:last-child { border-bottom: none; }
+  .game dt {
+    font-family: var(--grot); font-weight: 900; text-transform: uppercase;
+    font-size: clamp(17px, 2vw, 22px); letter-spacing: -0.01em;
+    padding: 16px 16px 16px 0;
+  }
+  .game dd { padding: 16px 0 16px 16px; border-left: var(--hairline); font-size: 15px; align-self: center; }
+  @media (max-width: 560px) {
+    .game { grid-template-columns: 1fr; }
+    .game dt { padding-bottom: 0; }
+    .game dd { border-left: none; padding: 6px 0 16px; }
+  }
+
+  /* ---- clock story ---- */
+  .duel { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: var(--rule); }
+  .duel > div { padding: clamp(18px, 3vw, 32px); }
+  .duel .problem { background: var(--ink); color: var(--paper); }
+  .duel h3 { font-family: var(--mono); font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 12px; }
+  .duel p { font-size: 16px; }
+  .duel p + p { margin-top: 12px; }
+  @media (max-width: 720px) { .duel { grid-template-columns: 1fr; } }
+  .tilde { font-family: var(--mono); background: var(--paper); color: var(--ink); padding: 0 4px; }
+  .duel .problem .tilde { background: var(--paper); color: var(--ink); }
+  .duel .fix .tilde { background: var(--ink); color: var(--paper); }
+
+  /* ---- install / code ---- */
+  ol.steps { list-style: none; counter-reset: step; max-width: 62ch; }
+  ol.steps li { counter-increment: step; display: flex; gap: 16px; padding: 14px 0; border-bottom: var(--hairline); }
+  ol.steps li::before {
+    content: counter(step);
+    font-family: var(--grot); font-weight: 900; font-size: 22px; line-height: 1;
+    min-width: 1.4em;
+  }
+  pre {
+    font-family: var(--mono); font-size: 14px; line-height: 1.6;
+    border: var(--rule);
+    padding: 18px;
+    overflow-x: auto;
+    margin: 24px 0;
+  }
+  code { font-family: var(--mono); font-size: 0.92em; }
+  .comment { opacity: 0.55; }
+
+  /* ---- lineage / footer ---- */
+  .lineage { font-size: 15px; max-width: 62ch; }
+  footer { padding: 0; }
+  footer .bar {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px;
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 16px var(--pad);
+  }
+  footer .dither-band { height: 28px; border-top: var(--rule); }
+
+  .flash { animation: einkflash 0.45s steps(2, end); }
+  @keyframes einkflash {
+    0% { filter: invert(1); }
+    100% { filter: invert(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="statusbar" role="banner">
+  <span>Infinity v1.8.4</span>
+  <span class="right">
+    <a href="https://github.com/alexfdez1010/Infinity" class="hide-s">github</a>
+    <span aria-hidden="true">~09:00</span>
+    <span aria-hidden="true">▮▮▮▯</span>
+  </span>
+</div>
+
+<header class="hero flash">
+  <div class="wrap">
+    <h1><span class="glyph" aria-hidden="true">∞</span> Infin&shy;ity</h1>
+    <p class="tag">Firmware for the Xteink X4 and X3 e-ink readers. Most firmwares let you read. <strong>Infinity won't let you stop.</strong></p>
+  </div>
+  <nav class="cta-row" aria-label="Primary">
+    <a class="cta primary" href="https://xteink.dve.al/">Flash from browser →</a>
+    <a class="cta" href="https://github.com/alexfdez1010/Infinity">Source on GitHub</a>
+    <a class="cta" href="#install">Install manually</a>
+  </nav>
+</header>
+
+<div class="specs" aria-label="Hardware">
+  <span>ESP32-C3 RISC-V</span>
+  <span>160 MHz</span>
+  <span>380 KB RAM</span>
+  <span>No PSRAM</span>
+  <span>16 MB flash</span>
+  <span>800 × 480 e-ink</span>
+  <span>MIT license</span>
+</div>
+
+<section id="hook">
+  <div class="wrap">
+    <span class="eyebrow">Hook</span>
+    <h2>Reading, treated like a habit</h2>
+    <p class="lede">Habits are built through reinforcement, so Infinity adds a gamification layer designed to keep you coming back. All of it is optional and can be switched off — but it's hard to give up once you start.</p>
+    <div class="grid">
+      <div class="cell"><h3>Daily goal</h3><p>You set the minutes; Infinity nudges you to hit them, every day.</p></div>
+      <div class="cell"><h3>Streak + freeze tokens</h3><p>A reading-day streak you'll hate to break — with tokens that forgive an off day.</p></div>
+      <div class="cell"><h3>Surprise rewards</h3><p>Sometimes hitting your goal gifts you a token, sometimes not. Variable-ratio reinforcement: exactly what hooks you.</p></div>
+      <div class="cell"><h3>Daily quests</h3><p>Rotating challenges that change every day.</p></div>
+      <div class="cell"><h3>Achievements</h3><p>Badges unlocked by reading milestones.</p></div>
+      <div class="cell"><h3>Records &amp; history</h3><p>Personal records and a weekly log, to see how far you've come.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="read">
+  <div class="wrap">
+    <span class="eyebrow">Read</span>
+    <h2>Everything a reader should do, polished</h2>
+    <div class="grid">
+      <div class="cell"><h3>EPUB 2 / 3</h3><p>Images, CSS styles, and multilingual hyphenation.</p></div>
+      <div class="cell"><h3>XTC · TXT · Markdown</h3><p>Pre-rendered XTC supports books larger than 2 GB.</p></div>
+      <div class="cell"><h3>Fonts</h3><p>Bookerly, Lexend and Bokerlam built in, plus custom fonts from the SD card. Dual-font model for mixed scripts.</p></div>
+      <div class="cell"><h3>Instant page turns</h3><p>Font cache plus silent pre-indexing of the next chapter. Four sizes with smoothed grayscale rendering.</p></div>
+      <div class="cell"><h3>KOReader sync</h3><p>Continue your progress across devices.</p></div>
+      <div class="cell"><h3>Focus mode</h3><p>Hides every extra: just you and your books.</p></div>
+      <div class="cell"><h3>Your layout</h3><p>Dark mode, five themes, a fully configurable status bar, four orientations with remappable buttons.</p></div>
+      <div class="cell"><h3>Bookmarks &amp; stats</h3><p>Long-press to bookmark; reading stats feed the streaks. Nine power-button actions via single, double or triple press.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="play">
+  <div class="wrap">
+    <span class="eyebrow">Play</span>
+    <h2>Six games, zero touchscreen</h2>
+    <p class="lede">Not a junk drawer: each game was chosen because it controls well with a D-pad and a handful of buttons. Each keeps its own high score.</p>
+    <dl class="games">
+      <div class="game"><dt>2048</dt><dd>Slide and merge equal tiles until you reach 2048.</dd></div>
+      <div class="game"><dt>Sliding puzzle</dt><dd>Push numbered tiles through the empty gap until they're in order.</dd></div>
+      <div class="game"><dt>Lights Out</dt><dd>Pressing a cell flips it and its neighbours. Turn everything off in the fewest moves.</dd></div>
+      <div class="game"><dt>Peg solitaire</dt><dd>Jump pegs to remove them. A perfect game leaves exactly one on the board.</dd></div>
+      <div class="game"><dt>Maze</dt><dd>Find the exit through generated mazes, counting your steps.</dd></div>
+      <div class="game"><dt>Rush Hour</dt><dd>Slide the blockers out of the way to free the stuck car.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section id="sync">
+  <div class="wrap">
+    <span class="eyebrow">Sync</span>
+    <h2>A clock with no clock</h2>
+    <p class="lede">The Xteink X4 has no battery-backed RTC. This is the kind of problem Infinity sweats over — and a fair sample of how the firmware is built under the hood.</p>
+    <div class="duel">
+      <div class="problem">
+        <h3>The problem</h3>
+        <p>On wake from deep sleep, time is restored from an imprecise internal oscillator that keeps accumulating drift. The device could show 23:55 when it was really 09:00.</p>
+        <p>Worse: bringing WiFi up from a low-priority task with little free memory froze the whole device.</p>
+      </div>
+      <div class="fix">
+        <h3>The fix</h3>
+        <p>Infinity resyncs opportunistically. When the clock is approximate, it connects in the background to a saved WiFi network, sets the time via NTP, and switches the radio off. A discreet <span class="tilde">~</span> in the status bar marks the time as approximate until sync completes — you saw it at the top of this page.</p>
+        <p>The radio now always starts from the main task, through a state machine that advances one small step per cycle, so the interface never blocks. Timezones with DST rules are built in.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <span class="eyebrow">Flash</span>
+    <h2>Install in one minute</h2>
+    <ol class="steps">
+      <li>Connect your X3 / X4 via USB-C and turn it on.</li>
+      <li>Open <a href="https://xteink.dve.al/">xteink.dve.al</a> and flash straight from the browser.</li>
+    </ol>
+    <p class="lede" style="margin-top:28px">Or build it yourself:</p>
+    <pre><code>git clone --recursive https://github.com/alexfdez1010/Infinity.git
+cd Infinity
+pio run --target upload</code></pre>
+    <p class="lede">Custom fonts: convert any <code>.ttf</code> / <code>.otf</code> at <a href="https://xteink.lakafior.com/">xteink.lakafior.com</a>, drop the <code>.bin</code> into <code>/fonts/</code> on the SD card, restart.</p>
+  </div>
+</section>
+
+<section id="build">
+  <div class="wrap">
+    <span class="eyebrow">Build</span>
+    <h2>380 KB of RAM, every byte counts</h2>
+    <p class="lede">PlatformIO, Arduino framework, C++17. The architecture follows an Android-style activity model: each screen is an <code>Activity</code> pushed onto a manager that owns the lifecycle and a single render thread. TLS buffers are trimmed to 4&nbsp;KB so WiFi and encryption fit in the free heap.</p>
+    <pre><code>pio run -e default   <span class="comment"># standard build, serial log</span>
+pio run -e slim      <span class="comment"># release build, smaller</span>
+pio run -e ble       <span class="comment"># bluetooth build (beta)</span>
+pio run -t upload    <span class="comment"># flash via USB</span></code></pre>
+    <p class="lineage">Contributing is the usual dance: fork → branch → pull request. Every visible string is translated (English and Castilian Spanish). Infinity stands on <a href="https://github.com/crosspoint-reader/crosspoint-reader">CrossPoint Reader</a>, which provides the EPUB engine and system foundation, and <a href="https://github.com/trilwu/crosspet">CrossPet</a>, the adaptation it takes over from.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="bar">
+    <span>∞ Infinity — MIT license</span>
+    <span>Not affiliated with Xteink</span>
+    <a href="https://github.com/alexfdez1010/Infinity">github.com/alexfdez1010/Infinity</a>
+  </div>
+  <div class="dither-band dither" aria-hidden="true"></div>
+</footer>
+
+</body>
+</html>
