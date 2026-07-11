@@ -93,7 +93,6 @@ pio run --target upload
 
 ```
 /fonts/          # Custom fonts (Xteink .bin format: Name_size_AxB.bin)
-/sleep/          # Sleep-screen images (PNG/BMP)
 ```
 
 ### 🔤 Custom fonts
