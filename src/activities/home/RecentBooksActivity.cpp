@@ -488,7 +488,7 @@ void RecentBooksActivity::render(RenderLock&&) {
         snprintf(pageStr, sizeof(pageStr), "%d / %d", (pageOffset / itemsPerPage) + 1, totalPages());
         const int pw = renderer.getTextWidth(SMALL_FONT_ID, pageStr);
         renderer.drawText(SMALL_FONT_ID, (pageWidth - pw) / 2,
-                          pageHeight - metrics.buttonHintsHeight - 14, pageStr, true);
+                          pageHeight - metrics.buttonHintsHeight - lineH - 14, pageStr, true);
       }
     }
 

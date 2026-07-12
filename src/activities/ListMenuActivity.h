@@ -42,6 +42,10 @@ class ListMenuActivity : public Activity {
   // current settings/state. Use add() (and optionally push<>()) to populate.
   virtual void buildMenu() = 0;
 
+  // Whether the up/down navigation button hints are shown. Some menus (e.g.
+  // Games) hide them to reduce clutter. Navigation still works either way.
+  virtual bool showDirectionHints() const { return true; }
+
   // Append a menu entry: a label plus the action to run when it is selected.
   void add(StrId labelId, std::function<void()> launch) {
     menuEntries.push_back({labelId, std::move(launch)});

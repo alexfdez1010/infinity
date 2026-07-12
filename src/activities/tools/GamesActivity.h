@@ -7,6 +7,7 @@
 class GamesActivity final : public ListMenuActivity {
  protected:
   void buildMenu() override;
+  bool showDirectionHints() const override { return false; }
 
  public:
   GamesActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
