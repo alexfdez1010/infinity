@@ -20,7 +20,6 @@ namespace {
 constexpr uint32_t CONNECT_TIMEOUT_MS = 10000;  // per network
 constexpr uint32_t SYNC_TIMEOUT_MS = 15000;     // wait for the SNTP reply
 constexpr int MAX_NETWORK_ATTEMPTS = 3;
-constexpr uint32_t MIN_FREE_HEAP = 55000;
 
 // State machine, driven entirely from the main loop via poll(). WiFi is brought
 // up on the main Arduino task on purpose: WiFi.mode(WIFI_STA) blocks on the
@@ -58,15 +57,15 @@ bool beginCurrent() {
 
 namespace OpportunisticTimeSync {
 
-void maybeStart() {
+void maybeStart(uint32_t minFreeHeap) {
   if (state != State::IDLE) return;             // already running
   if (!g_clockApproximate) return;              // clock already NTP-accurate this boot
   if (SETTINGS.clockMode == CrossPointSettings::CLOCK_MANUAL) return;  // user manages time by hand
   if (WiFi.status() == WL_CONNECTED) return;
 
   const uint32_t freeHeap = ESP.getFreeHeap();
-  if (freeHeap < MIN_FREE_HEAP) {
-    LOG_ERR("TSYNC", "Skipping NTP sync: only %u B free heap (< %u)", freeHeap, MIN_FREE_HEAP);
+  if (freeHeap < minFreeHeap) {
+    LOG_ERR("TSYNC", "Skipping NTP sync: only %u B free heap (< %u)", freeHeap, minFreeHeap);
     return;
   }
 
@@ -161,8 +160,9 @@ void claimForeground() {
 }
 
 void cancel() {
-  // Abort and release the radio (e.g. a book was opened). Tear WiFi down so the
-  // reader isn't starved, unless a foreground consumer claimed it.
+  // Abort and release the radio (e.g. a book was opened, or the reader got input
+  // mid-sync). Tear WiFi down so the reader isn't starved, unless a foreground
+  // consumer claimed it.
   if (state == State::IDLE) return;
   teardownRadio();
   ssidQueue.clear();

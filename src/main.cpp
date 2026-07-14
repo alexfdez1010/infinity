@@ -592,7 +592,8 @@ void loop() {
 #ifdef ENABLE_BLE
   bleActive = bleRecentActivity;
 #endif
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || activityManager.preventAutoSleep() || bleActive) {
+  const bool userInput = gpio.wasAnyPressed() || gpio.wasAnyReleased();
+  if (userInput || activityManager.preventAutoSleep() || bleActive) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
@@ -686,27 +687,38 @@ void loop() {
   // then); afterwards it retries every 15 min while the clock is still
   // approximate (e.g. WiFi was unreachable on the first try). maybeStart()
   // no-ops when already synced, connected, or in manual clock mode.
+  //
+  // It also runs WITH A BOOK OPEN, but only in a reading lull: the user must have
+  // been idle on the page for READER_IDLE_MS (so no page turn is imminent), the
+  // heap floor is raised (the reader holds the EPUB + page buffers), and any
+  // button press aborts the sync on the spot — the page turn wins, the radio goes
+  // down, and we retry a minute later. Loading a book still cancels outright
+  // (see goToReader): that is the heap/CPU peak, sync must not overlap it.
   {
-    static bool firstNtpDone = false;
-    static unsigned long lastNtpRetryMs = 0;
-    constexpr unsigned long NTP_FIRST_DELAY_MS = 90UL * 1000UL;
+    static unsigned long nextNtpAttemptMs = 90UL * 1000UL;  // first try ~90s after boot
     constexpr unsigned long NTP_RETRY_INTERVAL_MS = 15UL * 60UL * 1000UL;
+    constexpr unsigned long NTP_READER_RETRY_MS = 60UL * 1000UL;  // after a page turn aborted us
+    constexpr unsigned long READER_IDLE_MS = 25UL * 1000UL;       // reading lull before we dare
+    constexpr uint32_t NTP_READER_MIN_HEAP = 70000;               // reader needs its own headroom
     const unsigned long nowMs = millis();
-    // Never start a sync while a book is open: WiFi+TLS starves the reader on the
-    // single-core C3 and stalls page turns. It runs on Home/menus instead, and is
-    // cancelled outright if a book is opened mid-sync (see goToReader).
+    const bool inReader = activityManager.isReaderActivity();
     const bool wasBusy = OpportunisticTimeSync::busy();
-    if (g_clockApproximate && !activityManager.isReaderActivity()) {
-      if (!firstNtpDone) {
-        if (nowMs >= NTP_FIRST_DELAY_MS) {
-          firstNtpDone = true;
-          lastNtpRetryMs = nowMs;
-          OpportunisticTimeSync::maybeStart();
-        }
-      } else if (nowMs - lastNtpRetryMs >= NTP_RETRY_INTERVAL_MS) {
-        lastNtpRetryMs = nowMs;
+
+    if (wasBusy && inReader && userInput) {
+      // User is back — page turn / menu. Drop the radio immediately so the reader
+      // gets the whole CPU and heap back; try again after a short cooldown.
+      LOG_DBG("TSYNC", "Aborting in-reader NTP sync: user input");
+      OpportunisticTimeSync::cancel();
+      nextNtpAttemptMs = nowMs + NTP_READER_RETRY_MS;
+    } else if (g_clockApproximate && (long)(nowMs - nextNtpAttemptMs) >= 0) {
+      if (!inReader) {
         OpportunisticTimeSync::maybeStart();
+        nextNtpAttemptMs = nowMs + NTP_RETRY_INTERVAL_MS;
+      } else if (nowMs - lastActivityTime >= READER_IDLE_MS) {
+        OpportunisticTimeSync::maybeStart(NTP_READER_MIN_HEAP);
+        nextNtpAttemptMs = nowMs + NTP_RETRY_INTERVAL_MS;
       }
+      // Otherwise the user is actively paging: keep the slot and check again next loop.
     }
     // The moment a sync arms, free the active screen's 48KB frame-buffer cache
     // (Home/Recents) so the WiFi radio gets the contiguous heap it needs. Without

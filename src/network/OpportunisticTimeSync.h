@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 // Opportunistic background NTP resync on wake.
 //
 // The ESP32-C3 has no battery-backed RTC: after deep sleep the clock is restored
@@ -15,10 +17,15 @@
 // advances only one small step per iteration, so the UI never blocks.
 namespace OpportunisticTimeSync {
 
+// Default heap floor below which a sync is not even attempted (the radio needs a
+// big contiguous block to come up).
+constexpr uint32_t DEFAULT_MIN_FREE_HEAP = 55000;
+
 // Arm a sync when one is warranted (approximate clock, saved network, enough free
 // heap, not in manual mode, WiFi not already up). No-op otherwise. The actual
-// work happens in poll(). Call from the main loop.
-void maybeStart();
+// work happens in poll(). Call from the main loop. minFreeHeap raises the heap
+// floor for callers with less headroom to spare (e.g. while a book is open).
+void maybeStart(uint32_t minFreeHeap = DEFAULT_MIN_FREE_HEAP);
 
 // Advance the sync state machine one step. Call every main-loop iteration. Cheap
 // (a WiFi.status() check) except the one-time WiFi.mode(WIFI_STA) start.
