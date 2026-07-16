@@ -4,10 +4,11 @@
 
 #include "../Activity.h"
 
-// Adaptive N-Queens puzzle. Some queens are fixed; place the rest so no two
-// share a row, column or diagonal. Puzzles have exactly one completion.
+// N-Queens puzzle. Some queens are fixed; place the rest so no two share a
+// row, column or diagonal. Difficulty controls board size and clue count.
 class NQueensActivity final : public Activity {
   static constexpr int MAX_N = 10;
+  enum class State : uint8_t { SELECT, GENERATING, PLAY, WON };
 
   int8_t queens[MAX_N]{};   // column per row, -1 when empty
   int8_t givens[MAX_N]{};   // immutable clues
@@ -15,15 +16,13 @@ class NQueensActivity final : public Activity {
   int size = 4;
   int cursorX = 0;
   int cursorY = 0;
-  uint32_t puzzleElo = 1400;
-  bool solved = false;
-  bool generating = false;
+  int difficulty = 0;
+  int menuSel = 0;
+  State state = State::SELECT;
 
   bool isValid(const int8_t* setup) const;
-  int countCompletions(int8_t* setup, int row, int limit) const;
   bool solveRandom(int8_t* setup, int row);
   void shuffle(int8_t* values, int count) const;
-  void chooseDifficulty();
   void generateNextPuzzle();
   void newPuzzle();
   void completePuzzle();
