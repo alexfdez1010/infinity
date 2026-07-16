@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <Arduino.h>
 
 #include <cstring>
 #include <ctime>
@@ -17,8 +18,14 @@ constexpr char STATS_FILE[] = "/.crosspoint/reading_stats.bin";
 ReadingStats ReadingStats::instance;
 
 void ReadingStats::startSession() {
-  sessionStartTime = time(nullptr);
+  sessionStartMillis = millis();
   sessionActive = true;
+}
+
+uint32_t ReadingStats::currentSessionSeconds() const {
+  if (!sessionActive) return 0;
+  // Unsigned subtraction remains correct across the millis() wraparound.
+  return (millis() - sessionStartMillis) / 1000;
 }
 
 void ReadingStats::endSession(const char* title, uint8_t progress, const char* bookPath) {
@@ -55,16 +62,11 @@ void ReadingStats::endSession(const char* title, uint8_t progress, const char* b
     lastReadDayOfYear = curDay;
   }
 
-  // Accumulate session duration using wall-clock time (survives deep sleep unlike millis()).
-  // Guard: if either timestamp is before 2024-01-01 (NTP not synced), skip accumulation.
+  // Session duration must use monotonic time: NTP and manual clock corrections can
+  // change time(nullptr) while the reader is open. Sessions end before deep sleep.
   constexpr uint32_t MAX_SESSION_SECS = 86400;
-  uint32_t elapsedSecs = 0;
-  if (sessionStartTime >= MIN_VALID_TIME && now >= MIN_VALID_TIME) {
-    const int64_t diff = static_cast<int64_t>(now) - static_cast<int64_t>(sessionStartTime);
-    if (diff > 0 && diff < static_cast<int64_t>(MAX_SESSION_SECS)) {
-      elapsedSecs = static_cast<uint32_t>(diff);
-    }
-  }
+  const uint32_t sessionSecs = currentSessionSeconds();
+  const uint32_t elapsedSecs = sessionSecs < MAX_SESSION_SECS ? sessionSecs : 0;
 
   todayReadSeconds += elapsedSecs;
   totalReadSeconds += elapsedSecs;

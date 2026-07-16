@@ -1,12 +1,11 @@
 #pragma once
 #include <cstdint>
-#include <ctime>
 
 // Tracks reading session time and book progress for the Reading Stats sleep screen.
 // Stats are accumulated each time the reader activity exits (including on sleep entry).
 class ReadingStats {
   static ReadingStats instance;
-  time_t sessionStartTime = 0;  // Wall-clock time of session start (survives deep sleep, unlike millis())
+  uint32_t sessionStartMillis = 0;  // Monotonic start; unaffected by NTP or manual clock changes
   bool sessionActive = false;
 
  public:
@@ -32,12 +31,8 @@ class ReadingStats {
   // bookPath is optional — if provided, per-book stats are updated via BookStats.
   void endSession(const char* title, uint8_t progress, const char* bookPath = nullptr);
 
-  // Seconds elapsed in the active session (0 when idle or wall clock invalid)
-  uint32_t currentSessionSeconds() const {
-    if (!sessionActive || sessionStartTime <= 0) return 0;
-    const time_t now = time(nullptr);
-    return now > sessionStartTime ? static_cast<uint32_t>(now - sessionStartTime) : 0;
-  }
+  // Seconds elapsed in the active session (0 when idle).
+  uint32_t currentSessionSeconds() const;
 
   bool saveToFile() const;
   bool loadFromFile();
