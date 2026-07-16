@@ -3,6 +3,7 @@
 #include "ApagonActivity.h"
 #include "BlocksActivity.h"
 #include "MazeActivity.h"
+#include "NQueensActivity.h"
 #include "PegSolitaireActivity.h"
 #include "SlidingPuzzleActivity.h"
 #include "TwentyFortyEightActivity.h"
@@ -16,4 +17,5 @@ void GamesActivity::buildMenu() {
   add(StrId::STR_SENKU, [this] { push<PegSolitaireActivity>(); });
   add(StrId::STR_MAZE, [this] { push<MazeActivity>(); });
   add(StrId::STR_BLOCKS, [this] { push<BlocksActivity>(); });
+  add(StrId::STR_N_QUEENS, [this] { push<NQueensActivity>(); });
 }

@@ -13,6 +13,8 @@ class GameScores {
   uint32_t bestPeg = 0;     // Senku fewest pegs left (1 = perfect, 0 = no record yet)
   uint32_t bestMaze[3] = {0, 0, 0};    // Maze fewest steps per difficulty (0 = no record yet)
   uint32_t bestBlocks[3] = {0, 0, 0};  // Desatasco fewest moves per difficulty (0 = no record yet)
+  uint32_t queensElo = 1500;            // N-Queens adaptive player rating
+  uint32_t queensSolved = 0;            // Completed N-Queens puzzles
 
   static GameScores& getInstance() { return instance; }
 

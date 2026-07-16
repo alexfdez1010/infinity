@@ -10,7 +10,8 @@ namespace {
 // v4: version, best2048, bestApagon
 // v5: version, best2048, bestApagon, bestSlide, bestPeg
 // v6: ...v5 fields, bestMaze[3], bestBlocks[3]
-constexpr uint8_t SCORES_FILE_VERSION = 6;
+// v7: ...v6 fields, queensElo, queensSolved
+constexpr uint8_t SCORES_FILE_VERSION = 7;
 constexpr char SCORES_FILE[] = "/.crosspoint/game_scores.bin";
 }  // namespace
 
@@ -31,6 +32,8 @@ bool GameScores::saveToFile() const {
   serialization::writePod(file, bestPeg);
   for (int i = 0; i < 3; i++) serialization::writePod(file, bestMaze[i]);
   for (int i = 0; i < 3; i++) serialization::writePod(file, bestBlocks[i]);
+  serialization::writePod(file, queensElo);
+  serialization::writePod(file, queensSolved);
   file.close();
   return true;
 }
@@ -42,7 +45,7 @@ bool GameScores::loadFromFile() {
   }
   uint8_t version;
   serialization::readPod(file, version);
-  // v2..v6 all begin with best2048; v4 appends bestApagon, v5 appends bestSlide
+  // v2..v7 all begin with best2048; v4 appends bestApagon, v5 appends bestSlide
   // and bestPeg, v6 appends bestMaze[3] and bestBlocks[3]. The trailing v2 maze
   // data is ignored, and older files leave the newer fields at their defaults.
   if (version < 2 || version > SCORES_FILE_VERSION) {
@@ -61,6 +64,10 @@ bool GameScores::loadFromFile() {
   if (version >= 6) {
     for (int i = 0; i < 3; i++) serialization::readPod(file, bestMaze[i]);
     for (int i = 0; i < 3; i++) serialization::readPod(file, bestBlocks[i]);
+  }
+  if (version >= 7) {
+    serialization::readPod(file, queensElo);
+    serialization::readPod(file, queensSolved);
   }
   file.close();
   return true;
