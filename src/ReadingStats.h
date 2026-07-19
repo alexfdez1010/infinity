@@ -6,7 +6,12 @@
 class ReadingStats {
   static ReadingStats instance;
   uint32_t sessionStartMillis = 0;  // Monotonic start; unaffected by NTP or manual clock changes
+  uint32_t sessionAccountedSeconds = 0;
+  int16_t sessionStartYear = 0;
+  int16_t sessionStartDayOfYear = -1;
   bool sessionActive = false;
+
+  void rollToDay(int16_t year, int16_t dayOfYear);
 
  public:
   uint32_t totalReadSeconds = 0;    // All-time cumulative reading time
@@ -33,6 +38,13 @@ class ReadingStats {
 
   // Seconds elapsed in the active session (0 when idle).
   uint32_t currentSessionSeconds() const;
+
+  // Active-session seconds belonging to the current wall-clock day.
+  uint32_t currentDaySessionSeconds() const;
+
+  // When NTP moves an active session into another day, close its pre-sync
+  // segment on the old day and continue timing from the corrected day.
+  bool checkpointForClockChange(uint32_t& closedDaySeconds);
 
   bool saveToFile() const;
   bool loadFromFile();

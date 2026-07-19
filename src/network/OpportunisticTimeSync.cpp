@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "ClockState.h"
 #include "WifiCredentialStore.h"
 
 // Defined in main.cpp
-extern bool g_clockApproximate;
 extern uint32_t g_lastNtpSyncUnix;
 
 namespace {
@@ -57,20 +57,20 @@ bool beginCurrent() {
 
 namespace OpportunisticTimeSync {
 
-void maybeStart(uint32_t minFreeHeap) {
-  if (state != State::IDLE) return;             // already running
-  if (!g_clockApproximate) return;              // clock already NTP-accurate this boot
-  if (SETTINGS.clockMode == CrossPointSettings::CLOCK_MANUAL) return;  // user manages time by hand
-  if (WiFi.status() == WL_CONNECTED) return;
+bool maybeStart(uint32_t minFreeHeap) {
+  if (state != State::IDLE) return false;             // already running
+  if (!isClockApproximate()) return false;            // clock already NTP-accurate this boot
+  if (SETTINGS.clockMode == CrossPointSettings::CLOCK_MANUAL) return false;  // user manages time by hand
+  if (WiFi.status() == WL_CONNECTED) return false;
 
   const uint32_t freeHeap = ESP.getFreeHeap();
   if (freeHeap < minFreeHeap) {
     LOG_ERR("TSYNC", "Skipping NTP sync: only %u B free heap (< %u)", freeHeap, minFreeHeap);
-    return;
+    return false;
   }
 
   WIFI_STORE.loadFromFile();
-  if (WIFI_STORE.getCredentials().empty()) return;
+  if (WIFI_STORE.getCredentials().empty()) return false;
 
   // Build the try-queue: last-used network first, then the rest, capped. No
   // WiFi.scanNetworks() — the scan's AP-list buffer spiked heap and reaching
@@ -83,11 +83,12 @@ void maybeStart(uint32_t minFreeHeap) {
     if (cred.ssid == last) continue;
     ssidQueue.push_back(cred.ssid);
   }
-  if (ssidQueue.empty()) return;
+  if (ssidQueue.empty()) return false;
 
   queueIdx = 0;
   foregroundClaimed = false;
   state = State::STARTING;
+  return true;
 }
 
 void poll() {
@@ -128,7 +129,7 @@ void poll() {
       return;
 
     case State::SYNCING:
-      if (!g_clockApproximate) {
+      if (!isClockApproximate()) {
         LOG_INF("TSYNC", "NTP sync succeeded");
         state = State::TEARDOWN;
         return;

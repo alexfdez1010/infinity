@@ -96,6 +96,10 @@ class GamificationManager {
   // evaluates achievements and persists.
   void onSessionEnd();
 
+  // Close pre-sync minutes on the old day, then continue the active session on
+  // the corrected calendar day.
+  void onClockSync(uint32_t closedDaySeconds);
+
   // Cheap live check while reading (call on page turns). Fills `toast` and returns
   // true when the daily goal is first met today or a new achievement unlocks.
   bool pollReader(char* toast, size_t toastLen);
@@ -130,6 +134,7 @@ class GamificationManager {
   uint32_t lastKnownTotalSeconds = 0;  // for per-session delta (records)
   bool nudgeGiven = false;             // goal-gradient "almost there" toast shown today (not persisted)
   bool surprisePending = false;        // surprise freeze-token toast queued (not persisted)
+  bool clockCheckpointPending = false; // defer saves until ReadingStats commits the split session
 
   // If the wall-clock day changed since the last recorded reading day, close the
   // old day (goal streak bookkeeping), shift the week ring and update the streak.

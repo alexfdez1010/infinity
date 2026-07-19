@@ -85,7 +85,7 @@ uint32_t GamificationManager::liveTodaySeconds() const {
       base = 0;
     }
   }
-  return base + READ_STATS.currentSessionSeconds();
+  return base + READ_STATS.currentDaySessionSeconds();
 }
 
 void GamificationManager::adjustGoal(int deltaMinutes) {
@@ -224,7 +224,7 @@ void GamificationManager::rollSurpriseReward() {
 }
 
 AchievementId GamificationManager::evaluateAchievements() {
-  const uint32_t totalSecs = READ_STATS.totalReadSeconds + READ_STATS.currentSessionSeconds();
+  const uint32_t totalSecs = READ_STATS.totalReadSeconds + READ_STATS.currentDaySessionSeconds();
   const uint32_t todaySecs = liveTodaySeconds();
   const uint32_t sessionSecs = READ_STATS.currentSessionSeconds();
   const uint16_t effStreak = streak > READ_STATS.currentStreak ? streak : READ_STATS.currentStreak;
@@ -360,10 +360,25 @@ void GamificationManager::onSessionEnd() {
   }
 
   evaluateAchievements();
+  clockCheckpointPending = false;
   saveToFile();
 }
 
+void GamificationManager::onClockSync(uint32_t closedDaySeconds) {
+  clockCheckpointPending = true;
+  weekMinutes[0] = static_cast<uint16_t>(closedDaySeconds / 60);
+  if (closedDaySeconds > bestDaySeconds) bestDaySeconds = closedDaySeconds;
+  if (!goalCelebrated && dailyGoalMinutes > 0 && closedDaySeconds >= dailyGoalMinutes * 60UL) {
+    goalCelebrated = true;
+  }
+  evaluateAchievements();
+  rollDay();
+  // The same physical session is now active on the corrected day.
+  todaySessions = 1;
+}
+
 bool GamificationManager::saveToFile() const {
+  if (clockCheckpointPending) return true;
   Storage.mkdir("/.crosspoint");
   JsonDocument doc;
   doc["dailyGoalMinutes"] = dailyGoalMinutes;

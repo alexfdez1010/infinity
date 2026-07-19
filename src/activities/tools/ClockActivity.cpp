@@ -8,6 +8,7 @@
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
+#include "ClockState.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -47,8 +48,7 @@ void ClockActivity::applyEditedTime() {
   settimeofday(&tv, nullptr);
 
   // Hand-set time is authoritative — drop the "~" approximate indicator
-  extern bool g_clockApproximate;
-  g_clockApproximate = false;
+  setClockApproximate(false);
 }
 
 void ClockActivity::onEnter() {
@@ -248,9 +248,8 @@ void ClockActivity::render(RenderLock&&) {
     struct tm timeinfo;
     getLocalTime(&timeinfo, 0);
 
-    extern bool g_clockApproximate;
     char timeBuf[8];
-    snprintf(timeBuf, sizeof(timeBuf), "%s%02d:%02d", g_clockApproximate ? "~" : "",
+    snprintf(timeBuf, sizeof(timeBuf), "%s%02d:%02d", isClockApproximate() ? "~" : "",
              timeinfo.tm_hour, timeinfo.tm_min);
 
     const char* dayNames[] = {tr(STR_DAY_SUN), tr(STR_DAY_MON), tr(STR_DAY_TUE), tr(STR_DAY_WED),

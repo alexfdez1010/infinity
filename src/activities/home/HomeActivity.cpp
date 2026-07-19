@@ -11,6 +11,7 @@
 #include <Xtc.h>
 
 #include "network/OpportunisticTimeSync.h"
+#include "ClockState.h"
 
 extern FontDecompressor fontDecompressor;
 #ifdef ENABLE_BLE
@@ -293,10 +294,9 @@ void HomeActivity::renderHeaderClock() {
   time(&now);
   struct tm timeinfo;
   localtime_r(&now, &timeinfo);
-  extern bool g_clockApproximate;
   char buf[8];
   if (timeinfo.tm_year >= 125)
-    snprintf(buf, sizeof(buf), "%s%02d:%02d", g_clockApproximate ? "~" : "", timeinfo.tm_hour, timeinfo.tm_min);
+    snprintf(buf, sizeof(buf), "%s%02d:%02d", isClockApproximate() ? "~" : "", timeinfo.tm_hour, timeinfo.tm_min);
   else
     snprintf(buf, sizeof(buf), "--:--");
 

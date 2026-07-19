@@ -14,12 +14,14 @@
 #include <SPI.h>
 #include <builtinFonts/all.h>
 
+#include <atomic>
 #include <cstring>
 #include <sys/time.h>
 
 #include <esp_private/esp_clk.h>
 #include <esp_sntp.h>
 
+#include "ClockState.h"
 #include "CrossPetSettings.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -137,7 +139,23 @@ RTC_DATA_ATTR static uint32_t g_unixBeforeSleep = 0;     // time(nullptr) before
 
 // True when system clock was restored from backup (may have drift from deep sleep).
 // Reset to false after a fresh NTP sync. Used by clock UI to show "~" approximate indicator.
-bool g_clockApproximate = false;
+static std::atomic_bool g_clockApproximate{false};
+static bool g_ntpSyncPending = false;
+static portMUX_TYPE g_ntpSyncMux = portMUX_INITIALIZER_UNLOCKED;
+
+static bool takeNtpSyncPending() {
+  portENTER_CRITICAL(&g_ntpSyncMux);
+  const bool pending = g_ntpSyncPending;
+  g_ntpSyncPending = false;
+  portEXIT_CRITICAL(&g_ntpSyncMux);
+  return pending;
+}
+
+bool isClockApproximate() { return g_clockApproximate.load(std::memory_order_acquire); }
+
+void setClockApproximate(bool approximate) {
+  g_clockApproximate.store(approximate, std::memory_order_release);
+}
 
 // Unix time of the last successful NTP sync. Survives deep sleep in RTC memory;
 // 0 after a cold boot, which OpportunisticTimeSync treats as "stale, sync now".
@@ -146,8 +164,11 @@ RTC_DATA_ATTR uint32_t g_lastNtpSyncUnix = 0;
 // SNTP callback — clears approximate flag when NTP sync completes.
 // Runs in the lwIP task; requestUpdate() without `immediate` only sets a flag, safe here.
 static void onNtpSyncComplete(struct timeval* tv) {
-  g_clockApproximate = false;
+  setClockApproximate(false);
   g_lastNtpSyncUnix = (uint32_t)time(nullptr);
+  portENTER_CRITICAL(&g_ntpSyncMux);
+  g_ntpSyncPending = true;
+  portEXIT_CRITICAL(&g_ntpSyncMux);
   LOG_DBG("NTP", "Time synced, clock is now accurate");
   activityManager.requestUpdate();
 }
@@ -424,14 +445,14 @@ void setup() {
       struct timeval tv = {corrected, 0};
       settimeofday(&tv, nullptr);
       clockValid = true;
-      g_clockApproximate = true;  // RTC timer drifts during deep sleep
+      setClockApproximate(true);  // RTC timer drifts during deep sleep
       LOG_DBG("MAIN", "Clock restored via RTC: base=%lu + %us elapsed", g_unixBeforeSleep, elapsedSec);
     }
 
     if (!clockValid) {
       // Strategy 2: SD card backup (time will be slightly behind by sleep duration)
       clockValid = restoreClockFromSD();
-      if (clockValid) g_clockApproximate = true;
+      if (clockValid) setClockApproximate(true);
     }
 
     // Strategy 3: Build-time fallback — at least gives a baseline date for reading stats
@@ -446,7 +467,7 @@ void setup() {
       if (buildTime > 1700000000L) {
         struct timeval tv = {buildTime, 0};
         settimeofday(&tv, nullptr);
-        g_clockApproximate = true;
+        setClockApproximate(true);
         LOG_DBG("MAIN", "Clock set to build time: %lu", (unsigned long)buildTime);
       }
     }
@@ -458,7 +479,7 @@ void setup() {
     // confirms it. A flash/panic/USB reset can carry over a clock that is hours
     // behind yet has a valid year — never trust it just because it parses.
     // onNtpSyncComplete clears this when a sync lands.
-    g_clockApproximate = true;
+    setClockApproximate(true);
     LOG_DBG("MAIN", "Clock at boot: %lu (approximate until NTP)", (unsigned long)time(nullptr));
   }
 
@@ -528,7 +549,7 @@ void setup() {
   // WiFi + TLS (~needs a big chunk of the ~68KB free heap) at the same instant a
   // book is loading on wake starved the reader's allocations, so loadEpub() OOM'd
   // and bounced the resume to Home. The sync is now deferred to the main loop
-  // (~90s after boot) so the reader finishes loading first. See loop().
+  // (~3 min after boot) so the reader finishes loading first. See loop().
 
   // Ensure we're not still holding the power button before leaving setup.
   waitForPowerRelease();
@@ -683,7 +704,7 @@ void loop() {
   }
 
   // Background NTP sync, deferred so it never competes with a book loading on
-  // wake. First attempt fires ~90s after boot (reader has long since loaded by
+  // wake. First attempt fires ~3 min after boot (reader has long since loaded by
   // then); afterwards it retries every 15 min while the clock is still
   // approximate (e.g. WiFi was unreachable on the first try). maybeStart()
   // no-ops when already synced, connected, or in manual clock mode.
@@ -695,9 +716,17 @@ void loop() {
   // down, and we retry a minute later. Loading a book still cancels outright
   // (see goToReader): that is the heap/CPU peak, sync must not overlap it.
   {
-    static unsigned long nextNtpAttemptMs = 90UL * 1000UL;  // first try ~90s after boot
+    if (takeNtpSyncPending()) {
+      uint32_t closedDaySeconds = 0;
+      if (READ_STATS.checkpointForClockChange(closedDaySeconds)) {
+        GAMIFY.onClockSync(closedDaySeconds);
+      }
+    }
+
+    static unsigned long nextNtpAttemptMs = 3UL * 60UL * 1000UL;
     constexpr unsigned long NTP_RETRY_INTERVAL_MS = 15UL * 60UL * 1000UL;
     constexpr unsigned long NTP_READER_RETRY_MS = 60UL * 1000UL;  // after a page turn aborted us
+    constexpr unsigned long NTP_START_RETRY_MS = 30UL * 1000UL;
     constexpr unsigned long READER_IDLE_MS = 25UL * 1000UL;       // reading lull before we dare
     constexpr uint32_t NTP_READER_MIN_HEAP = 70000;               // reader needs its own headroom
     const unsigned long nowMs = millis();
@@ -710,13 +739,13 @@ void loop() {
       LOG_DBG("TSYNC", "Aborting in-reader NTP sync: user input");
       OpportunisticTimeSync::cancel();
       nextNtpAttemptMs = nowMs + NTP_READER_RETRY_MS;
-    } else if (g_clockApproximate && (long)(nowMs - nextNtpAttemptMs) >= 0) {
+    } else if (isClockApproximate() && (long)(nowMs - nextNtpAttemptMs) >= 0) {
       if (!inReader) {
-        OpportunisticTimeSync::maybeStart();
-        nextNtpAttemptMs = nowMs + NTP_RETRY_INTERVAL_MS;
+        const bool started = OpportunisticTimeSync::maybeStart();
+        nextNtpAttemptMs = nowMs + (started ? NTP_RETRY_INTERVAL_MS : NTP_START_RETRY_MS);
       } else if (nowMs - lastActivityTime >= READER_IDLE_MS) {
-        OpportunisticTimeSync::maybeStart(NTP_READER_MIN_HEAP);
-        nextNtpAttemptMs = nowMs + NTP_RETRY_INTERVAL_MS;
+        const bool started = OpportunisticTimeSync::maybeStart(NTP_READER_MIN_HEAP);
+        nextNtpAttemptMs = nowMs + (started ? NTP_RETRY_INTERVAL_MS : NTP_START_RETRY_MS);
       }
       // Otherwise the user is actively paging: keep the slot and check again next loop.
     }
@@ -726,7 +755,7 @@ void loop() {
     // RenderLock so we don't yank a buffer the render task is using.
     if (!wasBusy && OpportunisticTimeSync::busy()) {
       // The radio can only be brought up at full CPU clock. After 3s idle the
-      // main loop downclocks the CPU; the sync fires at ~90s idle, so WiFi.mode()
+      // main loop downclocks the CPU; the sync fires after a long idle, so WiFi.mode()
       // would run downclocked and HARD-FREEZE the device. Restore full clock now,
       // before poll() touches WiFi. setPowerSaving keeps it full while WiFi is up.
       powerManager.setPowerSaving(false);

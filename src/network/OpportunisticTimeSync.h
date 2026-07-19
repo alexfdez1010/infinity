@@ -25,7 +25,8 @@ constexpr uint32_t DEFAULT_MIN_FREE_HEAP = 55000;
 // heap, not in manual mode, WiFi not already up). No-op otherwise. The actual
 // work happens in poll(). Call from the main loop. minFreeHeap raises the heap
 // floor for callers with less headroom to spare (e.g. while a book is open).
-void maybeStart(uint32_t minFreeHeap = DEFAULT_MIN_FREE_HEAP);
+// Returns true only when a sync was armed.
+bool maybeStart(uint32_t minFreeHeap = DEFAULT_MIN_FREE_HEAP);
 
 // Advance the sync state machine one step. Call every main-loop iteration. Cheap
 // (a WiFi.status() check) except the one-time WiFi.mode(WIFI_STA) start.

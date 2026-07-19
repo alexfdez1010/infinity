@@ -19,13 +19,81 @@ ReadingStats ReadingStats::instance;
 
 void ReadingStats::startSession() {
   sessionStartMillis = millis();
+  sessionAccountedSeconds = 0;
+  sessionStartYear = 0;
+  sessionStartDayOfYear = -1;
+  const time_t now = time(nullptr);
+  constexpr time_t MIN_VALID_TIME = 1704067200;
+  if (now >= MIN_VALID_TIME) {
+    struct tm timeinfo = {};
+    localtime_r(&now, &timeinfo);
+    sessionStartYear = static_cast<int16_t>(timeinfo.tm_year);
+    sessionStartDayOfYear = static_cast<int16_t>(timeinfo.tm_yday);
+    rollToDay(sessionStartYear, sessionStartDayOfYear);
+  }
   sessionActive = true;
 }
 
 uint32_t ReadingStats::currentSessionSeconds() const {
   if (!sessionActive) return 0;
   // Unsigned subtraction remains correct across the millis() wraparound.
+  return sessionAccountedSeconds + (millis() - sessionStartMillis) / 1000;
+}
+
+uint32_t ReadingStats::currentDaySessionSeconds() const {
+  if (!sessionActive) return 0;
   return (millis() - sessionStartMillis) / 1000;
+}
+
+void ReadingStats::rollToDay(int16_t year, int16_t dayOfYear) {
+  if (dayOfYear == lastReadDayOfYear && year == lastReadYear) return;
+  if (lastReadDayOfYear >= 0 &&
+      (year < lastReadYear || (year == lastReadYear && dayOfYear < lastReadDayOfYear))) {
+    return;
+  }
+
+  bool isConsecutive = false;
+  if (lastReadDayOfYear >= 0) {
+    if (year == lastReadYear && dayOfYear == lastReadDayOfYear + 1) {
+      isConsecutive = true;
+    } else if (year == lastReadYear + 1 && dayOfYear == 0) {
+      isConsecutive = (lastReadDayOfYear == 364 || lastReadDayOfYear == 365);
+    }
+  }
+  currentStreak = isConsecutive ? static_cast<uint16_t>(currentStreak + 1) : 1;
+  if (currentStreak > longestStreak) longestStreak = currentStreak;
+
+  todayReadSeconds = 0;
+  lastReadYear = year;
+  lastReadDayOfYear = dayOfYear;
+}
+
+bool ReadingStats::checkpointForClockChange(uint32_t& closedDaySeconds) {
+  closedDaySeconds = 0;
+  if (!sessionActive || sessionStartDayOfYear < 0) return false;
+
+  constexpr time_t MIN_VALID_TIME = 1704067200;
+  const time_t now = time(nullptr);
+  if (now < MIN_VALID_TIME) return false;
+  struct tm timeinfo = {};
+  localtime_r(&now, &timeinfo);
+  const int16_t year = static_cast<int16_t>(timeinfo.tm_year);
+  const int16_t day = static_cast<int16_t>(timeinfo.tm_yday);
+  if (year == sessionStartYear && day == sessionStartDayOfYear) return false;
+  // A backward correction must not manufacture a second day transition.
+  if (year < sessionStartYear || (year == sessionStartYear && day < sessionStartDayOfYear)) return false;
+
+  const uint32_t segmentSeconds = currentDaySessionSeconds();
+  todayReadSeconds += segmentSeconds;
+  totalReadSeconds += segmentSeconds;
+  sessionAccountedSeconds += segmentSeconds;
+  sessionStartMillis = millis();
+  closedDaySeconds = todayReadSeconds;
+
+  rollToDay(year, day);
+  sessionStartYear = year;
+  sessionStartDayOfYear = day;
+  return true;
 }
 
 void ReadingStats::endSession(const char* title, uint8_t progress, const char* bookPath) {
@@ -40,33 +108,14 @@ void ReadingStats::endSession(const char* title, uint8_t progress, const char* b
   const int16_t curYear = static_cast<int16_t>(timeinfo.tm_year);
   const int16_t curDay  = static_cast<int16_t>(timeinfo.tm_yday);
   if (now >= MIN_VALID_TIME && (curDay != lastReadDayOfYear || curYear != lastReadYear)) {
-    // Check if this is the next consecutive day (streak continues)
-    bool isConsecutive = false;
-    if (lastReadDayOfYear >= 0) {
-      if (curYear == lastReadYear && curDay == lastReadDayOfYear + 1) {
-        isConsecutive = true;
-      } else if (curYear == lastReadYear + 1 && curDay == 0) {
-        // Year boundary: Dec 31 → Jan 1
-        isConsecutive = (lastReadDayOfYear == 364 || lastReadDayOfYear == 365);
-      }
-    }
-    if (isConsecutive) {
-      currentStreak++;
-    } else {
-      currentStreak = 1;  // New streak starts
-    }
-    if (currentStreak > longestStreak) longestStreak = currentStreak;
-
-    todayReadSeconds = 0;
-    lastReadYear      = curYear;
-    lastReadDayOfYear = curDay;
+    rollToDay(curYear, curDay);
   }
 
   // Session duration must use monotonic time: NTP and manual clock corrections can
   // change time(nullptr) while the reader is open. Sessions end before deep sleep.
   constexpr uint32_t MAX_SESSION_SECS = 86400;
   const uint32_t sessionSecs = currentSessionSeconds();
-  const uint32_t elapsedSecs = sessionSecs < MAX_SESSION_SECS ? sessionSecs : 0;
+  const uint32_t elapsedSecs = sessionSecs < MAX_SESSION_SECS ? currentDaySessionSeconds() : 0;
 
   todayReadSeconds += elapsedSecs;
   totalReadSeconds += elapsedSecs;
@@ -84,11 +133,12 @@ void ReadingStats::endSession(const char* title, uint8_t progress, const char* b
   }
 
   sessionActive = false;
+  sessionAccountedSeconds = 0;
   saveToFile();
 
   // Update per-book stats if path was provided
   if (bookPath && bookPath[0] != '\0') {
-    BOOK_STATS.updateBook(bookPath, title, elapsedSecs, progress);
+    BOOK_STATS.updateBook(bookPath, title, sessionSecs < MAX_SESSION_SECS ? sessionSecs : 0, progress);
   }
 }
 

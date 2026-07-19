@@ -17,6 +17,7 @@
 #include "../reader/TxtReaderActivity.h"
 #include "../reader/XtcReaderActivity.h"
 #include "CrossPetSettings.h"
+#include "ClockState.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "BookStats.h"
@@ -618,10 +619,9 @@ void SleepActivity::renderClockSleepScreen() const {
   }
 
   // Date line — prefix with "~" when clock may have drifted from deep sleep
-  extern bool g_clockApproximate;
   char dateBuf[64];
   if (timeValid) {
-    snprintf(dateBuf, sizeof(dateBuf), "%s%s, %d %s", g_clockApproximate ? "~" : "",
+    snprintf(dateBuf, sizeof(dateBuf), "%s%s, %d %s", isClockApproximate() ? "~" : "",
              DAY_NAMES[timeinfo.tm_wday], timeinfo.tm_mday, MONTH_NAMES[timeinfo.tm_mon]);
   } else {
     snprintf(dateBuf, sizeof(dateBuf), "%s", tr(STR_SYNC_TIME));
