@@ -14,7 +14,12 @@ class ClockActivity final : public Activity {
   // Month navigation (0 = current month, +1 = next, -1 = prev)
   int monthOffset = 0;
 
+  // Long-press Down = +1 day (offline date fix without an NTP sync)
+  bool addDayTriggered = false;
+  unsigned long dayAddedMsgExpiry = 0;  // 0 = no message shown
+
   void applyEditedTime();
+  void addOneDay();
   void renderCalendar(int startY, const struct tm& t, bool isCurrentMonth) const;
 
  public:

@@ -49,12 +49,48 @@ void ClockActivity::applyEditedTime() {
 
   // Hand-set time is authoritative — drop the "~" approximate indicator
   setClockApproximate(false);
+
+  // Same day-boundary handling as an NTP sync: if a reading session is somehow
+  // still open, its pre-change segment is closed on the old day instead of
+  // counting the jump as reading time.
+  notifyClockChanged();
+}
+
+void ClockActivity::addOneDay() {
+  // Advance the wall clock by one calendar day, keeping the time of day intact.
+  // Going through mktime() with tm_isdst=-1 (instead of adding 86400s) keeps the
+  // hour stable across a DST boundary.
+  struct tm t;
+  if (!getLocalTime(&t, 0)) return;
+  t.tm_mday += 1;
+  t.tm_isdst = -1;
+
+  struct timeval tv;
+  tv.tv_sec = mktime(&t);
+  tv.tv_usec = 0;
+  settimeofday(&tv, nullptr);
+
+  // The date is now hand-corrected but the time of day is still whatever it was,
+  // so the "~" approximate indicator (if any) stays as-is.
+
+  // Reading time is measured monotonically (millis), so the jump adds no minutes;
+  // this just lets the main loop close the pre-jump segment on the previous day —
+  // exactly what an NTP sync does when it crosses midnight.
+  notifyClockChanged();
+
+  monthOffset = 0;
+  lastRenderedMinute = t.tm_min;
+  lastUpdateMs = millis();
+  dayAddedMsgExpiry = millis() + 2500;
+  requestUpdate();
 }
 
 void ClockActivity::onEnter() {
   Activity::onEnter();
   editField = 0;
   monthOffset = 0;
+  addDayTriggered = false;
+  dayAddedMsgExpiry = 0;
   timeAvailable = isTimeValid();
   lastUpdateMs = millis();
   // Seed with the minute shown by the initial render so the first poll doesn't redraw
@@ -159,6 +195,21 @@ void ClockActivity::loop() {
 
     if (changed) requestUpdate();
     return;
+  }
+
+  // Hold Down = +1 day. Lets the date be corrected offline, without an NTP sync.
+  if (timeAvailable && !addDayTriggered && mappedInput.isPressed(MappedInputManager::Button::Down) &&
+      mappedInput.getHeldTime() >= 800) {
+    addDayTriggered = true;
+    addOneDay();
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) addDayTriggered = false;
+
+  // Expire the "+1 day" confirmation message
+  if (dayAddedMsgExpiry != 0 && millis() > dayAddedMsgExpiry) {
+    dayAddedMsgExpiry = 0;
+    requestUpdate();
   }
 
   // Month navigation with Left/Right in normal mode
@@ -269,14 +320,20 @@ void ClockActivity::render(RenderLock&&) {
     const int cellH  = gregH + 10;      // one row per calendar cell
     const int calH   = cellH * 7;       // header row + up to 6 body rows
 
-    // Center the whole block in content area
+    // Center the whole block in content area. The hint/confirmation line always
+    // reserves its slot so adding a day doesn't shift the layout.
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
     const int contentBot = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
-    const int blockH = timeHeight + 8 + dateHeight + 12 + calH;
+    const int blockH = timeHeight + 8 + dateHeight + 6 + gregH + 12 + calH;
     const int startY = contentTop + (contentBot - contentTop - blockH) / 2;
 
     renderer.drawCenteredText(UI_12_FONT_ID, startY, timeBuf, true, EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, startY + timeHeight + 8, dateBuf);
+
+    const bool dayAdded = (dayAddedMsgExpiry != 0);
+    renderer.drawCenteredText(SMALL_FONT_ID, startY + timeHeight + 8 + dateHeight + 6,
+                              dayAdded ? tr(STR_CLOCK_DAY_ADDED) : tr(STR_CLOCK_ADD_DAY_HINT), true,
+                              dayAdded ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
 
     // Compute viewed month (apply monthOffset)
     struct tm viewTm = timeinfo;
@@ -286,7 +343,7 @@ void ClockActivity::render(RenderLock&&) {
       viewTm.tm_mday = 1;
       mktime(&viewTm);  // normalizes month/year overflow
     }
-    renderCalendar(startY + timeHeight + 8 + dateHeight + 12, viewTm, isCurrentMonth);
+    renderCalendar(startY + timeHeight + 8 + dateHeight + 6 + gregH + 12, viewTm, isCurrentMonth);
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_CLOCK_SET_TIME), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

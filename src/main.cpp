@@ -157,6 +157,12 @@ void setClockApproximate(bool approximate) {
   g_clockApproximate.store(approximate, std::memory_order_release);
 }
 
+void notifyClockChanged() {
+  portENTER_CRITICAL(&g_ntpSyncMux);
+  g_ntpSyncPending = true;
+  portEXIT_CRITICAL(&g_ntpSyncMux);
+}
+
 // Unix time of the last successful NTP sync. Survives deep sleep in RTC memory;
 // 0 after a cold boot, which OpportunisticTimeSync treats as "stale, sync now".
 RTC_DATA_ATTR uint32_t g_lastNtpSyncUnix = 0;
@@ -166,9 +172,7 @@ RTC_DATA_ATTR uint32_t g_lastNtpSyncUnix = 0;
 static void onNtpSyncComplete(struct timeval* tv) {
   setClockApproximate(false);
   g_lastNtpSyncUnix = (uint32_t)time(nullptr);
-  portENTER_CRITICAL(&g_ntpSyncMux);
-  g_ntpSyncPending = true;
-  portEXIT_CRITICAL(&g_ntpSyncMux);
+  notifyClockChanged();
   LOG_DBG("NTP", "Time synced, clock is now accurate");
   activityManager.requestUpdate();
 }
